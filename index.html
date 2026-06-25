@@ -3147,8 +3147,21 @@ function buildEmailBody(emp, date, oldState, newState){
 }
 
 async function sendTestNotify(){
-  const cfg = getNotifyConfig();
+  const stored = getNotifyConfig();
+  // อ่านค่าจากช่องบนหน้าจอโดยตรง (ไม่รอกด "บันทึกการตั้งค่า") เพื่อให้ทดสอบตรงกับที่กรอกเสมอ
+  const cfg = {
+    gsUrl:        ($('notifyGsUrl')?.value||'').trim() || stored.gsUrl || gsConfig.url || DEFAULT_GS_URL || '',
+    lineEnabled:  $('lineEnabled')?.checked ?? stored.lineEnabled ?? false,
+    lineToId:     ($('lineToId')?.value||'').trim() || stored.lineToId || '',
+    lineTemplate: $('lineTemplate')?.value ?? stored.lineTemplate ?? '',
+    emailEnabled: $('emailEnabled')?.checked ?? stored.emailEnabled ?? false,
+    emailTo:      ($('emailTo')?.value||'').trim() || stored.emailTo || '',
+    emailCc:      ($('emailCc')?.value||'').trim() || stored.emailCc || '',
+    emailSubject: ($('emailSubject')?.value||'').trim() || stored.emailSubject || '',
+  };
   if(!cfg.gsUrl){ showNotifyResult('✗ กรุณาใส่ Apps Script URL ก่อน','var(--red-m)'); return; }
+  if(!cfg.lineEnabled && !cfg.emailEnabled){ showNotifyResult('✗ กรุณาเปิด LINE หรือ Email อย่างน้อยหนึ่งช่องทาง','var(--amber-m)'); return; }
+  if(cfg.emailEnabled && !cfg.emailTo){ showNotifyResult('✗ เปิด Email แล้ว แต่ยังไม่ได้กรอกอีเมลปลายทาง','var(--amber-m)'); return; }
   showNotifyResult('กำลังส่งทดสอบ...','var(--g5)');
   const fakeEmp = {name:'ทดสอบระบบ',id:'TEST-001',section:'HR&GA',group:'SML'};
   const fakeDate = new Date();
@@ -3163,9 +3176,10 @@ async function sendTestNotify(){
     emailSubject: '[TEST] ' + (cfg.emailSubject||''),
     emailBody:    '[TEST] ' + buildEmailBody(fakeEmp, fakeDate, 'Off', 'On'),
   };
+  const channels = [cfg.lineEnabled?'LINE':null, cfg.emailEnabled?'Email':null].filter(Boolean).join(' + ');
   try{
     await fetch(cfg.gsUrl, {method:'POST', body:JSON.stringify(payload), mode:'no-cors'});
-    showNotifyResult('✓ ส่งทดสอบแล้ว — ตรวจสอบ LINE และ Email ของคุณ','#064E3B');
+    showNotifyResult('✓ ส่งทดสอบแล้ว ('+channels+') — ตรวจสอบ '+channels+' ของคุณ','#064E3B');
   }catch(e){
     showNotifyResult('✗ ส่งไม่ได้: '+e.message,'var(--red-m)');
   }
