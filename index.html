@@ -2525,6 +2525,8 @@ async function saveLocal(){
       const payload={
         action:'syncAll',
         rows,
+        workdayKeys:workdays.map(d=>dateKey(d)), // ISO ของวันทำงาน เพื่อให้ backend เก็บ key ตรงกัน (กัน Off เด้งกลับเป็น On)
+        dedupe:true,                              // กด Save จริง → ให้ backend รวมแถวซ้ำ เก็บค่าล่าสุด
         employees:EMPLOYEES,
         attendance:attendData,
         days:days.map(d=>dateKey(d)),
@@ -2707,6 +2709,7 @@ function saveLocalSilent(){
   const payload={
     action:'syncAll',
     rows,
+    workdayKeys:workdays.map(d=>dateKey(d)), // ISO เพื่อให้ key ตรงกับ updateCell (กัน Off เด้งกลับเป็น On)
     employees:EMPLOYEES,
     attendance:attendData,
     days:days.map(d=>dateKey(d)),
@@ -2833,7 +2836,7 @@ async function forceSyncAll(){
   const workdays=days.filter(d=>!isOff(d));
   const rows=members.map(m=>({id:m.id,name:m.name,role:m.role,company:m.company,group:m.group,division:m.division,section:m.section,dept:m.dept,states:workdays.map(d=>attendData[m.name]?.[dateKey(d)]??currentDef)}));
   try{
-    await fetch(gsConfig.url,{method:'POST',body:JSON.stringify({action:'syncAll',rows}),mode:'no-cors'});
+    await fetch(gsConfig.url,{method:'POST',body:JSON.stringify({action:'syncAll',rows,workdayKeys:workdays.map(d=>dateKey(d)),dedupe:true}),mode:'no-cors'});
     setSyncStatus(`✓ Synced ${members.length} คน`,'ok');
     addSyncLog(`Sync ${members.length}×${workdays.length} สำเร็จ`,'ok');
     setTimeout(()=>setSyncStatus('','idle'),3000);
