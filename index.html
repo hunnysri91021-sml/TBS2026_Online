@@ -275,6 +275,7 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
     <button class="btn btn-white btn-xs" id="btnAdminSwitch" onclick="gotoAdmin()" style="display:none">⚙ Admin</button>
     <button class="btn btn-white btn-xs" id="btnESSSwitch" onclick="gotoESS()" style="display:none">← พนักงาน</button>
     <button class="btn btn-white btn-xs" id="btnAdminLogin" onclick="openModal('adminLoginModal')">🔐 Admin</button>
+    <button class="btn btn-white btn-xs" id="btnESSLogout" onclick="resetESS()" style="display:none">↩ ออกจากระบบ</button>
     <button class="btn btn-white btn-xs" id="btnLogout" onclick="doLogout()" style="display:none">ออกจากระบบ</button>
   </div>
 </header>
@@ -1308,6 +1309,7 @@ function doLogout(){
   $('btnESSSwitch').style.display='none';
   $('btnAdminLogin').style.display='inline-flex';
   $('tbUserBadge').style.display='none';
+  resetESS();
   showScreen('screenESS');
   toast('ออกจากระบบแล้ว');
 }
@@ -1341,6 +1343,7 @@ function gotoAdmin(){
   showScreen('screenAdmin');
   $('btnESSSwitch').style.display='inline-flex';
   $('btnAdminSwitch').style.display='none';
+  $('btnESSLogout').style.display='none';
 
   // Workflow ใหม่: ภาพรวม → เลือกพนักงาน → ตารางรายวัน
   const isSysAdmin=(AUTH.unit==='ADM');
@@ -1387,6 +1390,8 @@ function findEmployee(){
   setT('essEmpRole',emp.role||'');
   // Hide input, show personal section
   const inputWrap=$('essInputWrap'); if(inputWrap) inputWrap.style.display='none';
+  // แสดงปุ่มออกจากระบบบน topbar (ความเป็นส่วนตัวบนเครื่องที่ใช้ร่วมกัน)
+  const lo=$('btnESSLogout'); if(lo) lo.style.display='inline-flex';
   // Build day grid
   buildESSDayGrid(emp);
   $('essDayCard').style.display='block';
@@ -3425,7 +3430,8 @@ function resetESS(){
   currentESSEmp=null;
   const iw=$('essInputWrap'); if(iw){iw.style.display='block';}
   const dc=$('essDayCard'); if(dc){dc.style.display='none';}
-  const ec=$('essCode'); if(ec){ec.value='';}
+  const ec=$('essCode'); if(ec){ec.value=''; ec.focus();}
+  const lo=$('btnESSLogout'); if(lo){lo.style.display='none';}
 }
 
 const PUBLIC_FILTER_KEY='moo75_public_filter_v1';
