@@ -635,7 +635,7 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
         <button class="btn btn-primary btn-sm" onclick="setAdminDefaultOn()">Default = On</button>
         <button class="btn btn-danger btn-sm" onclick="resetSelectedEmployeesToOn()">↺ Reset On (คนที่เลือก)</button>
         <button class="btn btn-ghost btn-sm" onclick="exportExcel()">↓ Excel</button>
-        <button class="btn btn-ghost btn-sm" onclick="saveLocal()">💾 Save</button>
+        <button class="btn btn-ghost btn-sm" onclick="saveAndReload()">💾 Save</button>
         <button class="btn btn-ghost btn-sm" onclick="loadLocal()">📂 Load</button>
       </div>
     </div>
@@ -1076,6 +1076,27 @@ const dateKey=d=>d.toISOString().slice(0,10);
 const isWeekend=d=>d.getDay()===0||d.getDay()===6;
 const isPub=d=>!!PUB_HOLIDAYS[dateKey(d)];
 const isOff=d=>isWeekend(d)||isPub(d);
+// หาพนักงานจากชื่อ (เดิมเรียก empByName แต่ไม่เคยประกาศ → syncCell throw ทุกครั้ง ทำให้บันทึกทีละช่องไม่ติด)
+function empByName(name){ return EMPLOYEES.find(e=>e.name===name) || {}; }
+
+// ════════════════════════════════════════════════════════════
+//  PENDING EDITS — ช่องที่ผู้ใช้เพิ่งแก้ ยังไม่ยืนยันจาก Google
+//  ใช้กัน auto-refresh โหลดทับค่าที่เพิ่งแก้ (เด้งกลับเป็น On)
+// ════════════════════════════════════════════════════════════
+const pendingEdits = []; // [{name, dk, status}]
+function markDirty(name,dk,status){
+  const e=pendingEdits.find(x=>x.name===name&&x.dk===dk);
+  if(e) e.status=status; else pendingEdits.push({name,dk,status});
+}
+function reconcilePending(){
+  // หลังโหลดจาก Google: ถ้า Google ตรงกับที่แก้ → ยืนยัน(ลบ); ถ้ายังไม่ตรง → คงค่าที่แก้ไว้ (optimistic)
+  for(let i=pendingEdits.length-1;i>=0;i--){
+    const {name,dk,status}=pendingEdits[i];
+    const gv=attendData[name] ? attendData[name][dk] : undefined;
+    if(gv===status){ pendingEdits.splice(i,1); }
+    else { if(!attendData[name])attendData[name]={}; attendData[name][dk]=status; }
+  }
+}
 
 function dateRange(s,e){
   const arr=[]; let d=new Date(s); const end=new Date(e);
@@ -1464,6 +1485,7 @@ function buildESSDayButtons(emp){
       const next=STATES[(STATES.indexOf(cur)+1)%STATES.length];
       if(!attendData[emp.name])attendData[emp.name]={};
       attendData[emp.name][k]=next;
+      markDirty(emp.name,k,next);
       buildESSDayGrid(emp);
     };
     cell.appendChild(lbl);cell.appendChild(dateDiv);cell.appendChild(pill);
@@ -1506,18 +1528,21 @@ function updateESSSummary(emp){
 
 async function saveESSData(){
   if(!currentESSEmp)return;
-  // sync to Google Sheets ก่อน แล้วค่อยบันทึก local cache
+  // บันทึกเฉพาะวันทำงานของพนักงานคนนี้ทีละช่อง (dk = ISO) — ไม่ bulk ทับข้อมูลคนอื่น
   if(gsConfig.url&&gsConfig.initialized){
     const emp=currentESSEmp;
     const workdays=days.filter(d=>!isOff(d));
+    const tasks=[];
     for(let i=0;i<workdays.length;i++){
       const d=workdays[i];
-      const s=attendData[emp.name]?.[dateKey(d)]??'';
+      const k=dateKey(d);
+      const s=attendData[emp.name]?.[k]??'';
+      markDirty(emp.name,k,s);
       // silent:true — ไม่ให้ backend แจ้ง LINE ทีละช่อง เพราะจะสรุปแจ้งครั้งเดียวด้านล่าง
-      await syncCell({name:emp.name,label:`${d.getDate()}/${d.getMonth()+1}`,ri:EMPLOYEES.findIndex(e=>e.name===emp.name),di:i,state:s,totalW:workdays.length,totalM:EMPLOYEES.length,silent:true});
+      tasks.push(syncCell({name:emp.name,label:k,ri:EMPLOYEES.findIndex(e=>e.name===emp.name),di:i,state:s,totalW:workdays.length,totalM:EMPLOYEES.length,silent:true}));
     }
+    await Promise.all(tasks);
   }
-  saveLocalSilent();
   toast(`บันทึกสถานะของ ${currentESSEmp.name} แล้ว ✓`);
   // สรุปแจ้งเตือน 1 ครั้งต่อการบันทึก — ส่งเสมอ ให้ backend ตัดสินใจจาก config ฝั่ง Server
   // (เครื่องพนักงานไม่มี config ใน localStorage จึงต้องพึ่ง server config: LINE_ENABLED/LINE_TO/EMAIL_ENABLED/EMAIL_TO)
@@ -1536,6 +1561,8 @@ async function saveESSData(){
     };
     fetch(notifyUrl,{method:'POST',body:JSON.stringify(payload2),mode:'no-cors'}).catch(()=>{});
   }
+  // ดึงข้อมูลล่าสุดจาก Google มายืนยัน (ช่องที่ยังไม่ยืนยันถูกคงไว้ด้วย reconcilePending)
+  if(gsConfig.url){ setTimeout(()=>loadFromGoogleDb(true), 1200); }
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
@@ -1909,11 +1936,11 @@ function toggleCellAdmin(name,dk,ri,di,totalW,totalM,hid,bid,rangeDays,members){
   const ns=STATES[(STATES.indexOf(cur)+1)%STATES.length];
   if(!attendData[name])attendData[name]={};
   attendData[name][dk]=ns;
+  markDirty(name,dk,ns);
   buildMatrix(hid,bid,rangeDays,members,true);
-  saveLocal();
-  if(gsConfig.url&&gsConfig.enabled&&gsConfig.initialized){
-    const d=rangeDays.find(x=>dateKey(x)===dk);
-    syncCell({name,label:d?`${d.getDate()}/${d.getMonth()+1}`:'',ri,di,state:ns,totalW,totalM});
+  // บันทึกทีละช่อง (dk = ISO) แทนการ bulk overwrite ทั้งตาราง → ปลอดภัยเมื่อหลายคนแก้พร้อมกัน
+  if(gsConfig.url&&gsConfig.initialized){
+    syncCell({name,label:dk,ri,di,state:ns,totalW,totalM});
   }
 }
 
@@ -1932,8 +1959,9 @@ function showCtxMenu(e,name,dk,ri,di,totalW,totalM,hid,bid,rangeDays,members){
     if(s===cur){const ck=document.createElement('span');ck.style.cssText='margin-left:auto;color:var(--brand)';ck.textContent='✓';item.appendChild(ck);}
     item.onclick=()=>{
       if(!attendData[name])attendData[name]={};attendData[name][dk]=s;
-      buildMatrix(hid,bid,rangeDays,members,true);saveLocal();
-      if(gsConfig.url&&gsConfig.initialized){const d=rangeDays.find(x=>dateKey(x)===dk);syncCell({name,label:d?`${d.getDate()}/${d.getMonth()+1}`:'',ri,di,state:s,totalW,totalM});}
+      markDirty(name,dk,s);
+      buildMatrix(hid,bid,rangeDays,members,true);
+      if(gsConfig.url&&gsConfig.initialized){syncCell({name,label:dk,ri,di,state:s,totalW,totalM});}
       removeCtxMenu();
     };
     menu.appendChild(item);
@@ -1941,8 +1969,8 @@ function showCtxMenu(e,name,dk,ri,di,totalW,totalM,hid,bid,rangeDays,members){
   const div=document.createElement('div');div.className='ctx-div';menu.appendChild(div);
   const fill=document.createElement('div');fill.className='ctx-item';fill.textContent='↔ เติมทั้งแถว';
   fill.onclick=()=>{
-    rangeDays.filter(d=>!isOff(d)).forEach(d=>{if(!attendData[name])attendData[name]={};attendData[name][dateKey(d)]=cur;});
-    buildMatrix(hid,bid,rangeDays,members,true);saveLocal();removeCtxMenu();toast(`เติมทั้งแถว ${name}`);
+    rangeDays.filter(d=>!isOff(d)).forEach(d=>{const k=dateKey(d);if(!attendData[name])attendData[name]={};attendData[name][k]=cur;markDirty(name,k,cur);if(gsConfig.url&&gsConfig.initialized)syncCell({name,label:k,ri,di,state:cur,totalW,totalM});});
+    buildMatrix(hid,bid,rangeDays,members,true);removeCtxMenu();toast(`เติมทั้งแถว ${name} (อย่าลืมกด Save)`);
   };
   menu.appendChild(fill);
   menu.style.cssText=`display:block;left:${Math.min(e.clientX,window.innerWidth-180)}px;top:${Math.min(e.clientY,window.innerHeight-280)}px`;
@@ -1963,8 +1991,8 @@ function renderBulkBar(rangeDays,members){
     const p=document.createElement('div');p.className='m-pill '+(STATE_CSS[s]||'p-blank');
     p.style.cssText='width:40px;height:32px;font-size:10px;cursor:pointer';p.textContent=s;
     p.onclick=()=>{
-      sel.forEach(n=>{rangeDays.filter(d=>!isOff(d)).forEach(d=>{if(!attendData[n])attendData[n]={};attendData[n][dateKey(d)]=s;});});
-      buildMatrix('editHead','editBody',rangeDays,members,true);saveLocal();toast(`ตั้ง ${sel.length} คน → ${STATE_FULL[s]}`);
+      sel.forEach(n=>{rangeDays.filter(d=>!isOff(d)).forEach(d=>{const k=dateKey(d);if(!attendData[n])attendData[n]={};attendData[n][k]=s;markDirty(n,k,s);if(gsConfig.url&&gsConfig.initialized)syncCell({name:n,label:k,ri:0,di:0,state:s,totalW:0,totalM:0});});});
+      buildMatrix('editHead','editBody',rangeDays,members,true);toast(`ตั้ง ${sel.length} คน → ${STATE_FULL[s]} (อย่าลืมกด Save)`);
     };
     bar.appendChild(p);
   });
@@ -2172,7 +2200,7 @@ function buildUnitPanel(unit){
               <button class="btn btn-primary" onclick="unitApply('${unit}')">✓ ใช้ตั้งค่านี้</button>
               <button class="btn btn-primary btn-sm" onclick="setAdminDefaultOn()">Default = On</button>
               <button class="btn btn-danger btn-sm" onclick="resetSelectedEmployeesToOn()">↺ Reset On (คนที่เลือก)</button>
-              <button class="btn btn-ghost btn-sm" onclick="saveLocal()">💾 บันทึก</button>
+              <button class="btn btn-ghost btn-sm" onclick="saveAndReload()">💾 บันทึก</button>
               <button class="btn btn-ghost btn-sm" onclick="exportExcel()">↓ Excel</button>
             </div>
           </div>
@@ -2298,11 +2326,14 @@ function setStatusForNames(names,status){
     if(!attendData[name]) attendData[name]={};
     days.forEach(d=>{
       if(isOff(d)) return;
-      attendData[name][dateKey(d)]=status;
+      const k=dateKey(d);
+      attendData[name][k]=status;
+      markDirty(name,k,status);
+      if(gsConfig.url&&gsConfig.initialized) syncCell({name,label:k,ri:0,di:0,state:status,totalW:0,totalM:0});
     });
   });
-  saveLocal();
   refreshAdminViews();
+  toast('ตั้งค่าแล้ว — กด Save เพื่อยืนยันและดึงข้อมูลล่าสุด');
   return true;
 }
 
@@ -2509,6 +2540,37 @@ async function deleteManagedEmployee(){
 // ════════════════════════════════════════════════════════════
 //  SAVE / LOAD
 // ════════════════════════════════════════════════════════════
+
+// บันทึกเฉพาะช่องที่แก้ (pending) ขึ้น Google ทีละช่อง แล้วดึงข้อมูลล่าสุดมาแสดง
+// ปลอดภัยเมื่อหลายคนแก้พร้อมกัน (ไม่เขียนทับช่องของคนอื่น) และยืนยันว่าบันทึกจริง
+async function saveAndReload(){
+  if(!gsConfig.url){ toast('⚠️ ยังไม่ได้ตั้งค่า Google Sheet URL'); return; }
+  setSyncStatus('↑ กำลังบันทึก...','loading');
+  // ส่งทุกช่องที่ค้างอยู่ (เผื่อ sync ทีละช่องตอนกดยังไม่สำเร็จ เช่นช่วง Offline)
+  const tasks=[];
+  pendingEdits.forEach(({name,dk,status})=>{
+    const emp=empByName(name);
+    tasks.push(
+      fetch(gsConfig.url,{method:'POST',body:JSON.stringify({
+        action:'updateCell',empId:emp.id||'',memberName:name,dateLabel:dk,
+        newState:status,silent:true,updateBy:AUTH?.isAdmin?'Admin':'Employee'
+      }),mode:'no-cors'}).catch(()=>{})
+    );
+  });
+  await Promise.all(tasks);
+  setSyncStatus('↓ ดึงข้อมูลล่าสุด...','loading');
+  await new Promise(r=>setTimeout(r,1200)); // รอ Google เขียนเสร็จ
+  await loadFromGoogleDb(true);              // ดึงล่าสุด (ช่องที่ยังไม่ยืนยันถูกคงไว้ด้วย reconcilePending)
+  if(pendingEdits.length===0){
+    toast('บันทึกและดึงข้อมูลล่าสุดแล้ว ✓');
+    setSyncStatus('✓ Online','ok');
+  }else{
+    toast('บันทึกแล้ว — บางรายการกำลังซิงค์ จะอัปเดตอัตโนมัติ');
+    setSyncStatus('↻ กำลังซิงค์...','loading');
+    setTimeout(async()=>{ await loadFromGoogleDb(true); setSyncStatus(pendingEdits.length?'↻ ซิงค์...':'✓ Online', pendingEdits.length?'loading':'ok'); }, 2500);
+  }
+}
+
 async function saveLocal(){
   // Google-first: บันทึก Google Sheet เป็นหลัก ไม่ใช้ localStorage
   if(gsConfig.url){
@@ -2663,14 +2725,31 @@ async function loadFromGoogleDb(silent=false){
       days.forEach(d=>{ attendData[emp.name][dateKey(d)] = isOff(d)?'':'On'; });
     });
 
+    // จับคู่ record → (พนักงาน, วัน) โดยเก็บค่าที่ UpdateTime "ล่าสุด" (กันแถวซ้ำ/ค่าเก่าทับค่าใหม่)
+    const best={}; // `${name}\n${dk}` -> {status, time}
     (data.attendance||[]).forEach(r=>{
       const emp=EMPLOYEES.find(e=>String(e.id)===String(r.EmpID||r.empId||'') || e.name===String(r.Name||r.name||''));
       if(!emp) return;
-      const rawLabel=String(r.DateLabel||r.dateLabel||r.Date||r.date||'').trim();
-      const dk=labelMap[rawLabel] || (parseGoogleDate(rawLabel,rawLabel)?dateKey(parseGoogleDate(rawLabel,rawLabel)):rawLabel);
-      if(!attendData[emp.name]) attendData[emp.name]={};
-      if(dk) attendData[emp.name][dk]=String(r.Status||r.status||'');
+      // ดึงวันที่จากคอลัมน์ Key ก่อน (เป็นข้อความ ไม่ถูก Sheets แปลงเป็น Date) แล้วค่อย DateLabel
+      let labelStr='';
+      const keyStr=String(r.Key||r.key||'');
+      if(keyStr.indexOf('|')>=0) labelStr=keyStr.slice(keyStr.lastIndexOf('|')+1).trim();
+      if(!labelStr) labelStr=String(r.DateLabel||r.dateLabel||r.Date||r.date||'').trim();
+      const pd=parseGoogleDate(labelStr,labelStr);
+      const dk=pd?dateKey(pd):(labelMap[labelStr]||labelStr);
+      if(!dk) return;
+      const t=(r.UpdateTime||r.updateTime)?new Date(r.UpdateTime||r.updateTime).getTime():0;
+      const gk=emp.name+'\n'+dk;
+      if(!best[gk] || t>=best[gk].time) best[gk]={status:String(r.Status||r.status||''), time:t};
     });
+    Object.keys(best).forEach(gk=>{
+      const i=gk.indexOf('\n'); const name=gk.slice(0,i), dk=gk.slice(i+1);
+      if(!attendData[name]) attendData[name]={};
+      attendData[name][dk]=best[gk].status;
+    });
+
+    // คงค่าที่ผู้ใช้เพิ่งแก้ (ยังไม่ยืนยันจาก Google) ไว้ กัน auto-refresh เด้งกลับ
+    reconcilePending();
 
     // Workflow: หน้า Step 3 ต้องแสดงเฉพาะพนักงานที่เลือกใน Step 2
     // ดังนั้นการโหลดข้อมูลจาก Google ห้ามเลือกพนักงานทั้งหมดอัตโนมัติ
@@ -2683,7 +2762,7 @@ async function loadFromGoogleDb(silent=false){
     gsConfig.initialized=true;
     gsConfig.url=gsUrlBase();
     saveGsConfig();
-    saveLocalSilent();
+    // สำคัญ: ห้ามเขียนกลับขึ้น Google ตอนโหลด (เดิม saveLocalSilent ทำให้ค่า default On ทับ Off ที่บันทึกไว้)
     refreshAfterDataLoad();
     setSyncStatus('✓ Online','ok');
     if(!silent) toast('โหลดข้อมูลจาก Google แล้ว ✓');
@@ -3332,8 +3411,9 @@ async function init(){
 init();
 
 // Auto refresh จาก Google ทุก 30 วินาที เพื่อให้ทุกเครื่องเห็นข้อมูลเดียวกัน
+// ข้ามถ้ามีการแก้ที่ยังไม่บันทึก/ยังไม่ยืนยัน (กันโหลดทับงานที่กำลังทำ)
 setInterval(()=>{
-  if(document.visibilityState==='visible' && gsConfig.url){
+  if(document.visibilityState==='visible' && gsConfig.url && pendingEdits.length===0){
     loadFromGoogleDb(true);
   }
 },30000);
@@ -3560,6 +3640,7 @@ window.setAdminDefaultOn = typeof setAdminDefaultOn !== "undefined" ? setAdminDe
 window.resetCurrentPeriodToOn = typeof resetCurrentPeriodToOn !== "undefined" ? resetCurrentPeriodToOn : function(){};
 window.resetSystemToDefault = typeof resetSystemToDefault !== "undefined" ? resetSystemToDefault : function(){};
 window.saveLocal = typeof saveLocal !== "undefined" ? saveLocal : function(){};
+window.saveAndReload = typeof saveAndReload !== "undefined" ? saveAndReload : function(){};
 window.loadLocal = typeof loadLocal !== "undefined" ? loadLocal : function(){};
 window.exportExcel = typeof exportExcel !== "undefined" ? exportExcel : function(){};
 window.testGsConnection = typeof testGsConnection !== "undefined" ? testGsConnection : function(){};
