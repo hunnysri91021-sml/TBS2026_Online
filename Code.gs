@@ -642,9 +642,51 @@ function updateCell_(data) {
   log_('updateCell', rec.empId + ' ' + rec.name + ' ' + rec.dateLabel + ' => ' + rec.status);
 
   // แจ้งเตือนเฉพาะเมื่อมีสถานะจริง และมีการเปลี่ยนแปลง หรือเป็นรายการใหม่
-  if (rec.status) notifyLineOA_(rec, oldState);
+  // data.silent = true → ข้ามการแจ้งทีละช่อง (ใช้ตอนพนักงานกดบันทึก แล้วสรุปแจ้งครั้งเดียวจากฝั่ง client)
+  if (rec.status && !data.silent) notifyChange_(rec, oldState);
 
   return json_({ ok: true, oldState: oldState || '' });
+}
+
+// แจ้งเตือนเมื่อสถานะเปลี่ยน — ทั้ง LINE และ Email ตาม Config ฝั่ง Server (ทำงานได้จากทุกเครื่อง)
+function notifyChange_(r, oldState) {
+  if (oldState && oldState === r.status) return; // ไม่เปลี่ยน ไม่แจ้ง
+  notifyLineOA_(r, oldState);
+  notifyChangeEmail_(r, oldState);
+}
+
+function notifyChangeEmail_(r, oldState) {
+  if (getLineProp_('EMAIL_ENABLED').toUpperCase() !== 'TRUE') return;
+  const to = getLineProp_('EMAIL_TO');
+  if (!to) return;
+  if (oldState && oldState === r.status) return;
+
+  const TH = { On:'มาทำงาน', Off:'หยุด 75%', 'พร.':'ลาพักร้อน', 'กิจ':'ลากิจ', 'ป่วย':'ลาป่วย', '':'—' };
+  const before = oldState ? (TH[oldState] || oldState) : '—';
+  const after  = TH[r.status] || r.status || '—';
+  const body = [
+    'แจ้งการเปลี่ยนแปลงสถานะ — Temporary Business Suspension (75% Compensation) 2026', '',
+    'พนักงาน  : ' + r.name + ' (' + r.empId + ')',
+    'วันที่     : ' + r.dateLabel,
+    'สถานะเดิม : ' + before,
+    'สถานะใหม่ : ' + after,
+    'แก้ไขโดย  : ' + r.updateBy,
+    'เวลา      : ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') + ' น.', '',
+    '──────────────────────────────',
+    'บริษัท สยามกลการโลจิสติกส์ จำกัด (SML)'
+  ].join('\n');
+  const cc = (getLineProp_('EMAIL_CC') || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean).join(',');
+  try {
+    MailApp.sendEmail({
+      to: to,
+      cc: cc,
+      subject: getLineProp_('EMAIL_SUBJECT') || '[TBS 2026] แจ้งเตือนการเปลี่ยนแปลงสถานะ',
+      body: body
+    });
+    log_('EMAIL_CHANGE', 'ok ' + to);
+  } catch (err) {
+    log_('EMAIL_CHANGE_ERROR', err.message);
+  }
 }
 
 function upsertAttendance_(r) {
