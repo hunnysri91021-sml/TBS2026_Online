@@ -391,7 +391,8 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
     </div><!-- /essPersonalSection -->
 
     <!-- ══ SECTION B: Dashboard ภาพรวม (read-only) ══ -->
-    <div id="essPublicDashboard">
+    <!-- ซ่อนภาพรวมทั้งบริษัทบนหน้าพนักงาน — แสดงเฉพาะตาราง/สถานะของตนเองเท่านั้น -->
+    <div id="essPublicDashboard" style="display:none">
       <!-- Header -->
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;margin-top:8px">
         <div style="flex:1;height:1px;background:var(--g3)"></div>
@@ -1441,25 +1442,28 @@ async function saveESSData(){
     for(let i=0;i<workdays.length;i++){
       const d=workdays[i];
       const s=attendData[emp.name]?.[dateKey(d)]??'';
-      await syncCell({name:emp.name,label:`${d.getDate()}/${d.getMonth()+1}`,ri:EMPLOYEES.findIndex(e=>e.name===emp.name),di:i,state:s,totalW:workdays.length,totalM:EMPLOYEES.length});
+      // silent:true — ไม่ให้ backend แจ้ง LINE ทีละช่อง เพราะจะสรุปแจ้งครั้งเดียวด้านล่าง
+      await syncCell({name:emp.name,label:`${d.getDate()}/${d.getMonth()+1}`,ri:EMPLOYEES.findIndex(e=>e.name===emp.name),di:i,state:s,totalW:workdays.length,totalM:EMPLOYEES.length,silent:true});
     }
   }
   saveLocalSilent();
   toast(`บันทึกสถานะของ ${currentESSEmp.name} แล้ว ✓`);
-  // Send save notification (one summary per save)
+  // สรุปแจ้งเตือน 1 ครั้งต่อการบันทึก — ส่งเสมอ ให้ backend ตัดสินใจจาก config ฝั่ง Server
+  // (เครื่องพนักงานไม่มี config ใน localStorage จึงต้องพึ่ง server config: LINE_ENABLED/LINE_TO/EMAIL_ENABLED/EMAIL_TO)
   const cfg2=getNotifyConfig();
-  if(cfg2.gsUrl && cfg2.notifyOnSave && currentESSEmp){
-    const today=days.filter(d=>!isOff(d));
+  const notifyUrl=cfg2.gsUrl||gsConfig.url||DEFAULT_GS_URL||'';
+  if(notifyUrl && currentESSEmp){
     const sumMsg=buildSaveNotifyMsg(currentESSEmp);
     const payload2={
       action:'notify',
       lineEnabled:cfg2.lineEnabled,
+      lineToId:cfg2.lineToId||'',
       lineMessage:sumMsg,
-      emailEnabled:cfg2.emailEnabled,emailTo:cfg2.emailTo,emailCc:cfg2.emailCc,
-      emailSubject:(cfg2.emailSubject||'[TBS 2026] แจ้งเตือน')+' — '+currentESSEmp.name,
+      emailEnabled:cfg2.emailEnabled,emailTo:cfg2.emailTo||'',emailCc:cfg2.emailCc||'',
+      emailSubject:(cfg2.emailSubject||'[TBS 2026] แจ้งเตือนการเปลี่ยนแปลงสถานะ')+' — '+currentESSEmp.name,
       emailBody:sumMsg,
     };
-    fetch(cfg2.gsUrl,{method:'POST',body:JSON.stringify(payload2),mode:'no-cors'}).catch(()=>{});
+    fetch(notifyUrl,{method:'POST',body:JSON.stringify(payload2),mode:'no-cors'}).catch(()=>{});
   }
   window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -2757,10 +2761,10 @@ async function forceSyncAll(){
   }catch(e){setSyncStatus('✗ Sync ล้มเหลว','idle');addSyncLog('Sync ล้มเหลว: '+e.message,'err');}
 }
 
-async function syncCell({name,label,ri,di,state,totalW,totalM}){
+async function syncCell({name,label,ri,di,state,totalW,totalM,silent}){
   setSyncStatus('↑','loading');
   try{
-    await fetch(gsConfig.url,{method:'POST',body:JSON.stringify({action:'updateCell',empId:empByName(name).id||'',memberName:name,dateLabel:label,colIndex:di,rowIndex:ri,newState:state,totalMembers:totalM,updateBy:AUTH.isAdmin?'Admin':'Employee'}),mode:'no-cors'});
+    await fetch(gsConfig.url,{method:'POST',body:JSON.stringify({action:'updateCell',empId:empByName(name).id||'',memberName:name,dateLabel:label,colIndex:di,rowIndex:ri,newState:state,totalMembers:totalM,silent:silent||false,updateBy:AUTH.isAdmin?'Admin':'Employee'}),mode:'no-cors'});
     setSyncStatus('✓','ok');addSyncLog(`${name} ${label} → ${state}`,'ok');
     setTimeout(()=>setSyncStatus('','idle'),2000);
   }catch(e){setSyncStatus('✗','idle');addSyncLog(`Sync cell ล้มเหลว`,'err');}
