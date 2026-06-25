@@ -2438,8 +2438,17 @@ async function saveLocal(){
   if(gsConfig.url){
     try{
       setSyncStatus('↑ กำลังบันทึก...','loading');
+      // Backend syncAll_ อ่านเฉพาะ data.rows — ต้องสร้าง rows (id/name/...+states) ส่งไปด้วย
+      // ไม่เช่นนั้นการกด Save / Bulk จะไม่ถูกบันทึกลง Google Sheet
+      const workdays=days.filter(d=>!isOff(d));
+      const rows=EMPLOYEES.map(m=>({
+        id:m.id, name:m.name, role:m.role, company:m.company, group:m.group,
+        division:m.division, section:m.section, dept:m.dept,
+        states:workdays.map(d=>attendData[m.name]?.[dateKey(d)]??currentDef)
+      }));
       const payload={
         action:'syncAll',
+        rows,
         employees:EMPLOYEES,
         attendance:attendData,
         days:days.map(d=>dateKey(d)),
@@ -2605,8 +2614,16 @@ async function loadFromGoogleDb(silent=false){
 function saveLocalSilent(){
   // Auto-save → Google Sheet เงียบๆ (no localStorage)
   if(!gsConfig.url) return;
+  // ส่ง rows เพื่อให้ backend syncAll_ บันทึกสถานะได้จริง (เช่นเดียวกับ saveLocal)
+  const workdays=days.filter(d=>!isOff(d));
+  const rows=EMPLOYEES.map(m=>({
+    id:m.id, name:m.name, role:m.role, company:m.company, group:m.group,
+    division:m.division, section:m.section, dept:m.dept,
+    states:workdays.map(d=>attendData[m.name]?.[dateKey(d)]??currentDef)
+  }));
   const payload={
     action:'syncAll',
+    rows,
     employees:EMPLOYEES,
     attendance:attendData,
     days:days.map(d=>dateKey(d)),
