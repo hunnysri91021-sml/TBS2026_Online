@@ -722,6 +722,22 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
       </div>
     </div>
     <div class="card" style="margin-bottom:14px">
+      <div class="card-hdr"><div class="card-title">📅 จัดการวันหยุดนักขัตฤกษ์ / วันหยุดพิเศษ</div></div>
+      <div class="card-body">
+        <div class="note-box" style="margin-top:0">เสาร์–อาทิตย์ถูกตั้งเป็นวันหยุดอัตโนมัติอยู่แล้ว · ที่นี่ใช้เพิ่ม/ลบ <strong>วันหยุดนักขัตฤกษ์หรือวันหยุดพิเศษ</strong> วันที่ในรายการจะถูกเว้นจากการนับวันทำงานและกดสถานะไม่ได้</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+          <div class="field" style="min-width:150px"><label>วันที่</label><input type="date" id="holDate"></div>
+          <div class="field" style="flex:1;min-width:180px"><label>ชื่อวันหยุด</label><input type="text" id="holName" placeholder="เช่น วันหยุดพิเศษ"></div>
+          <button class="btn btn-primary btn-sm" onclick="addHolidayRow()">＋ เพิ่มวันหยุด</button>
+        </div>
+        <div id="holidayList" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto;margin-bottom:12px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-success btn-sm" onclick="saveHolidaysToGoogle()">💾 บันทึกวันหยุดขึ้น Google</button>
+          <span id="holidaySaveStatus" style="font-size:11px;color:var(--g5)"></span>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
       <div class="card-hdr"><div class="card-title">🔑 รหัสผ่านหน่วยงาน</div></div>
       <div class="card-body">
         <div class="form-grid">
@@ -976,7 +992,9 @@ document.addEventListener('DOMContentLoaded', function() {
 // ════════════════════════════════════════════════════════════
 let EMPLOYEES = []; // PDPA SAFE: employee data is loaded from Google Sheet only;
 
-const PUB_HOLIDAYS = {
+// วันหยุดนักขัตฤกษ์ — ค่าตั้งต้น (จะถูกแทนที่ด้วยรายการจาก Google Sheet เมื่อโหลดข้อมูล)
+// ใช้ let เพื่อให้ Admin แก้ไขผ่านหน้าจอและบันทึกลง Google ได้
+let PUB_HOLIDAYS = {
   '2026-01-01':'วันขึ้นปีใหม่','2026-04-06':'วันจักรี','2026-04-13':'วันสงกรานต์',
   '2026-04-14':'วันสงกรานต์','2026-04-15':'วันสงกรานต์','2026-05-01':'วันแรงงาน',
   '2026-05-04':'วันฉัตรมงคล','2026-06-03':'วันเฉลิมฯ ราชินี','2026-07-28':'วันเฉลิมพระชนมพรรษา ร.10','2026-07-29':'วันหยุดชดเชย วันเฉลิมพระชนมพรรษา ร.10',
@@ -1138,6 +1156,59 @@ function applyPeriod(){
   if(essSub)essSub.textContent=`${pname} · ${thDate(sd)}–${thDate(ed)}`;
   toast('ตั้งค่าช่วงเวลาแล้ว ✓');
   saveLocal();
+}
+
+// ════════════════════════════════════════════════════════════
+//  HOLIDAY MANAGER (Admin แก้ไขวันหยุด → เก็บใน Google Sheet)
+// ════════════════════════════════════════════════════════════
+function renderHolidayList(){
+  const box=$('holidayList'); if(!box) return;
+  const entries=Object.keys(PUB_HOLIDAYS).sort();
+  if(!entries.length){ box.innerHTML='<div style="font-size:12px;color:var(--g5);text-align:center;padding:10px">ยังไม่มีวันหยุดในรายการ</div>'; return; }
+  box.innerHTML=entries.map(d=>{
+    const dt=parseGoogleDate(d,d);
+    const label=dt?thDate(dt):d;
+    const name=(PUB_HOLIDAYS[d]||'').replace(/"/g,'&quot;');
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 11px;border:1px solid var(--g3);border-radius:8px;background:var(--g0)">
+      <span style="font-size:11px;font-weight:700;color:var(--brand);min-width:96px">${label}</span>
+      <span style="flex:1;font-size:12px;color:var(--g7)">${name||'วันหยุด'}</span>
+      <button class="btn btn-danger btn-xs" onclick="deleteHolidayRow('${d}')">✕ ลบ</button>
+    </div>`;
+  }).join('');
+}
+
+function addHolidayRow(){
+  const d=($('holDate')?.value||'').trim();
+  const name=($('holName')?.value||'').trim();
+  if(!d){ toast('กรุณาเลือกวันที่'); return; }
+  PUB_HOLIDAYS[d]=name||'วันหยุด';
+  if($('holDate'))$('holDate').value='';
+  if($('holName'))$('holName').value='';
+  renderHolidayList();
+  const st=$('holidaySaveStatus'); if(st){st.textContent='มีการเปลี่ยนแปลง — อย่าลืมกดบันทึก';st.style.color='var(--amber-m)';}
+}
+
+function deleteHolidayRow(d){
+  delete PUB_HOLIDAYS[d];
+  renderHolidayList();
+  const st=$('holidaySaveStatus'); if(st){st.textContent='มีการเปลี่ยนแปลง — อย่าลืมกดบันทึก';st.style.color='var(--amber-m)';}
+}
+
+async function saveHolidaysToGoogle(){
+  const url=gsUrlBase();
+  const st=$('holidaySaveStatus');
+  if(!url){ if(st){st.textContent='✗ ยังไม่ได้ตั้งค่า Google URL';st.style.color='var(--red-m)';} return; }
+  const holidays=Object.keys(PUB_HOLIDAYS).map(d=>({date:d,name:PUB_HOLIDAYS[d]}));
+  if(st){st.textContent='กำลังบันทึก...';st.style.color='var(--g5)';}
+  try{
+    await fetch(url,{method:'POST',body:JSON.stringify({action:'saveHolidays',holidays,updateBy:AUTH?.name||'System Admin'}),mode:'no-cors'});
+    if(st){st.textContent='✓ บันทึกวันหยุดแล้ว';st.style.color='#064E3B';}
+    toast('บันทึกวันหยุดขึ้น Google แล้ว ✓');
+    // คำนวณวันทำงานใหม่ทันที (isOff อ่านจาก PUB_HOLIDAYS ที่อัปเดตแล้ว)
+    refreshAdminViews?.(); buildPublicDashboard?.(); if(currentESSEmp) renderESSPanel?.();
+  }catch(e){
+    if(st){st.textContent='✗ บันทึกไม่สำเร็จ: '+e.message;st.style.color='var(--red-m)';}
+  }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1534,6 +1605,7 @@ function switchAdminTab(tab){
     $('tabConfig').style.display='block';
     $('atConfig')?.classList.add('active');
     buildEmpSummary();
+    renderHolidayList();
   }
 }
 
@@ -2565,6 +2637,13 @@ async function loadFromGoogleDb(silent=false){
       EMPLOYEES=gEmps.sort((a,b)=>String(a.id).localeCompare(String(b.id)));
     }
 
+    // วันหยุด: ถ้ามีรายการจาก Google ให้ใช้แทนค่าตั้งต้นทั้งหมด (Admin จัดการผ่านหน้าจอ)
+    if(Array.isArray(data.holidays) && data.holidays.length){
+      const map={};
+      data.holidays.forEach(h=>{ const d=String(h.date||h.Date||'').slice(0,10); if(d) map[d]=String(h.name||h.Name||'').trim()||'วันหยุด'; });
+      PUB_HOLIDAYS=map;
+    }
+
     const gDays=(data.days||[]).map(d=>parseGoogleDate(d.date||d.Date,d.label||d.Label)).filter(Boolean);
     if(gDays.length){
       const seen=new Set();
@@ -3467,6 +3546,10 @@ window.unitClearAll = typeof unitClearAll !== "undefined" ? unitClearAll : funct
 window.unitApply = typeof unitApply !== "undefined" ? unitApply : function(){};
 window.unitToggleEmp = typeof unitToggleEmp !== "undefined" ? unitToggleEmp : function(){};
 window.applyPeriod = typeof applyPeriod !== "undefined" ? applyPeriod : function(){};
+window.addHolidayRow = typeof addHolidayRow !== "undefined" ? addHolidayRow : function(){};
+window.deleteHolidayRow = typeof deleteHolidayRow !== "undefined" ? deleteHolidayRow : function(){};
+window.saveHolidaysToGoogle = typeof saveHolidaysToGoogle !== "undefined" ? saveHolidaysToGoogle : function(){};
+window.renderHolidayList = typeof renderHolidayList !== "undefined" ? renderHolidayList : function(){};
 window.savePins = typeof savePins !== "undefined" ? savePins : function(){};
 window.buildEmpSummary = typeof buildEmpSummary !== "undefined" ? buildEmpSummary : function(){};
 window.togglePanel = typeof togglePanel !== "undefined" ? togglePanel : function(){};
