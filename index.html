@@ -492,9 +492,12 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
         </div>
       </div>
 
-      <!-- Note PDPA -->
-      <div style="text-align:center;font-size:10px;color:var(--g4);padding-bottom:4px">
-        ⓘ แสดงเฉพาะจำนวนรวม ไม่เปิดเผยข้อมูลรายบุคคล
+      <!-- รายชื่อพนักงานตามหน่วยงานที่กรอง -->
+      <div class="matrix-wrap" id="pubMatrixWrap">
+        <table class="matrix" id="pubMatrix">
+          <thead id="pubMatrixHead"></thead>
+          <tbody id="pubMatrixBody"></tbody>
+        </table>
       </div>
 
     </div><!-- /essPublicDashboard -->
@@ -1861,12 +1864,7 @@ function buildMatrix(headId,bodyId,rangeDays,members,editable){
     // name cell
     const tdN=document.createElement('td');tdN.className='td-name';
     const gc=GRP_CSS[emp.group]||'b-sml';
-    if(headId==='pubMatrixHead'){
-      // PDPA: แสดงชื่อย่อในหน้า public (ชื่อต้น + นามสกุลตัวแรก.)
-      tdN.innerHTML=`<div style="font-size:12px;font-weight:600;color:var(--g8);line-height:1.2">${maskName(emp.name)}</div><div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap"><span class="badge ${gc}">${emp.group}</span><span style="font-size:10px;color:var(--g4)">${emp.section||''}</span></div>`;
-    }else{
-      tdN.innerHTML=`<div style="font-size:12px;font-weight:600;color:var(--g8);line-height:1.2">${emp.name}</div><div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap"><span class="badge ${gc}">${emp.group}</span><span style="font-size:10px;color:var(--g5)">${emp.id}</span><span style="font-size:10px;color:var(--g4)">${emp.section||''}</span></div>`;
-    }
+    tdN.innerHTML=`<div style="font-size:12px;font-weight:600;color:var(--g8);line-height:1.2">${emp.name}</div><div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap"><span class="badge ${gc}">${emp.group}</span><span style="font-size:10px;color:var(--g5)">${emp.id}</span><span style="font-size:10px;color:var(--g4)">${emp.section||''}</span></div>`;
     tr.appendChild(tdN);
     // day cells
     let empOn=0,empOff=0,empLeave=0,empWork=0;
@@ -3597,6 +3595,8 @@ function buildPublicDashboard(){
     sp.style.background='#10B981';
     setTimeout(()=>{ if(sp) sp.style.background='var(--g3)'; }, 800);
   }
+  // ตารางรายชื่อพนักงาน (ดูได้เหมือน admin แต่แก้ไขไม่ได้)
+  buildMatrix('pubMatrixHead','pubMatrixBody',days,members,false);
 }
 window.onPublicFilterChange = onPublicFilterChange;
 window.clearPublicFilter = clearPublicFilter;
