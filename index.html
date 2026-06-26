@@ -817,13 +817,14 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
             </div>
             <div class="field">
               <label>รูปแบบข้อความ LINE</label>
-              <textarea id="lineTemplate" rows="5" style="font-size:12px;font-family:monospace;resize:vertical">🔔 TBS 2026 — อัปเดตสถานะ
+              <textarea id="lineTemplate" rows="7" style="font-size:12px;font-family:monospace;resize:vertical">🔔 TBS 2026 — อัปเดตสถานะ
 
 👤 {empName} ({empId})
-📅 วันที่: {date}
+📅 วันที่เปลี่ยนแปลง: {date}
 📋 สถานะ: {newState}
 ✏ โดย: {via}
-⏰ เวลา: {time}</textarea>
+⏰ เวลาส่ง: {sentAt}
+🔗 ตรวจสอบข้อมูล: {link}</textarea>
             </div>
           </div>
         </div>
@@ -1558,6 +1559,11 @@ async function saveESSData(){
   const notifyUrl=cfg2.gsUrl||gsConfig.url||DEFAULT_GS_URL||'';
   if(notifyUrl && currentESSEmp){
     const sumMsg=buildSaveNotifyMsg(currentESSEmp);
+    const attendRows=days.filter(d=>!isOff(d)).map(d=>({
+      date:dateKey(d),
+      dateLabel:`${d.getDate()} ${TH_MONTHS[d.getMonth()]} ${d.getFullYear()+543}`,
+      status:attendData[currentESSEmp.name]?.[dateKey(d)]||''
+    }));
     const payload2={
       action:'notify',
       lineEnabled:cfg2.lineEnabled,
@@ -1566,6 +1572,9 @@ async function saveESSData(){
       emailEnabled:cfg2.emailEnabled,emailTo:cfg2.emailTo||'',emailCc:cfg2.emailCc||'',
       emailSubject:(cfg2.emailSubject||'[TBS 2026] แจ้งเตือนการเปลี่ยนแปลงสถานะ')+' — '+currentESSEmp.name,
       emailBody:sumMsg,
+      attachExcel:true,
+      empName:currentESSEmp.name, empId:currentESSEmp.id||'',
+      attendRows,
     };
     fetch(notifyUrl,{method:'POST',body:JSON.stringify(payload2),mode:'no-cors'}).catch(()=>{});
   }
@@ -1590,7 +1599,8 @@ function buildSaveNotifyMsg(emp){
 📋 ลารวม: ${la} วัน
 📊 % มาทำงาน: ${pct}%
 ──────────────────
-บันทึกเมื่อ: ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')} น.`;
+บันทึกเมื่อ: ${now.getDate()} ${TH_MONTHS[now.getMonth()]} ${now.getFullYear()+543} ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')} น.
+${(gsUrlBase?gsUrlBase():(gsConfig.url||DEFAULT_GS_URL||''))?`🔗 ตรวจสอบข้อมูล: ${gsUrlBase?gsUrlBase():(gsConfig.url||DEFAULT_GS_URL||'')}`:''}`;
 }
 
 // ════════════════════════════════════════════════════════════
@@ -3274,14 +3284,17 @@ function buildNotifyMsg(emp, date, oldState, newState, via){
   const now = new Date();
   const timeStr = now.getHours()+':'+String(now.getMinutes()).padStart(2,'0')+' น.';
   const dateStr = date.getDate()+' '+TH_MONTHS[date.getMonth()]+' '+(date.getFullYear()+543);
+  const sentAtStr = now.getDate()+' '+TH_MONTHS[now.getMonth()]+' '+(now.getFullYear()+543)+' '+timeStr;
+  const link = gsUrlBase ? gsUrlBase() : (gsConfig.url||DEFAULT_GS_URL||'');
   const os = STATE_TH_N[oldState]||oldState||'—';
   const ns = STATE_TH_N[newState]||newState||'—';
   const viaStr = via||'พนักงาน';
   if(!cfg.lineTemplate){
     return '[TBS 2026] '+emp.name+' ('+emp.id+')'+
-           '\nเปลี่ยนสถานะ '+dateStr+
+           '\nวันที่เปลี่ยนแปลง: '+dateStr+
            '\n'+os+' → '+ns+
-           '\nเวลา: '+timeStr;
+           '\nเวลาส่ง: '+sentAtStr+
+           (link?'\nตรวจสอบข้อมูล: '+link:'');
   }
   return cfg.lineTemplate
     .replace('{empName}', emp.name||'')
@@ -3290,6 +3303,8 @@ function buildNotifyMsg(emp, date, oldState, newState, via){
     .replace('{oldState}', os)
     .replace('{newState}', ns)
     .replace('{time}', timeStr)
+    .replace('{sentAt}', sentAtStr)
+    .replace('{link}', link)
     .replace('{via}', viaStr);
 }
 
@@ -3298,17 +3313,19 @@ function buildEmailBody(emp, date, oldState, newState){
   const STATE_TH_N={'On':'มาทำงาน','Off':'หยุด 75%','พร.':'ลาพักร้อน','กิจ':'ลากิจ','ป่วย':'ลาป่วย'};
   const now=new Date();
   const dateStr=`${date.getDate()} ${TH_MONTHS[date.getMonth()]} ${date.getFullYear()+543}`;
+  const sentAtStr=`${now.getDate()} ${TH_MONTHS[now.getMonth()]} ${now.getFullYear()+543} ${now.toLocaleTimeString('th-TH')} น.`;
+  const link = gsUrlBase ? gsUrlBase() : (gsConfig.url||DEFAULT_GS_URL||'');
   return `แจ้งการเปลี่ยนแปลงสถานะ — Temporary Business Suspension (75% Compensation) 2026
 
 พนักงาน : ${emp.name} (${emp.id})
 ส่วน/แผนก: ${emp.section||emp.dept||''}  ·  บริษัท: ${emp.group||''}
 
-วันที่    : ${dateStr}
-สถานะเดิม : ${STATE_TH_N[oldState]||oldState||'—'}
-สถานะใหม่ : ${STATE_TH_N[newState]||newState||'—'}
-บันทึกโดย : ${AUTH.name||'พนักงาน'}
-เวลา      : ${now.toLocaleTimeString('th-TH')} น.
-
+วันที่เปลี่ยนแปลง : ${dateStr}
+สถานะเดิม        : ${STATE_TH_N[oldState]||oldState||'—'}
+สถานะใหม่        : ${STATE_TH_N[newState]||newState||'—'}
+บันทึกโดย        : ${AUTH.name||'พนักงาน'}
+เวลาส่ง          : ${sentAtStr}
+${link?`ตรวจสอบข้อมูล    : ${link}\n`:''}
 ──────────────────────────────
 ระบบ Temporary Business Suspension (75% Compensation) 2026
 บริษัท สยามกลการโลจิสติกส์ จำกัด (SML)`;
