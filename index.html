@@ -1559,6 +1559,11 @@ async function saveESSData(){
   const notifyUrl=cfg2.gsUrl||gsConfig.url||DEFAULT_GS_URL||'';
   if(notifyUrl && currentESSEmp){
     const sumMsg=buildSaveNotifyMsg(currentESSEmp);
+    const attendRows=days.filter(d=>!isOff(d)).map(d=>({
+      date:dateKey(d),
+      dateLabel:`${d.getDate()} ${TH_MONTHS[d.getMonth()]} ${d.getFullYear()+543}`,
+      status:attendData[currentESSEmp.name]?.[dateKey(d)]||''
+    }));
     const payload2={
       action:'notify',
       lineEnabled:cfg2.lineEnabled,
@@ -1567,6 +1572,9 @@ async function saveESSData(){
       emailEnabled:cfg2.emailEnabled,emailTo:cfg2.emailTo||'',emailCc:cfg2.emailCc||'',
       emailSubject:(cfg2.emailSubject||'[TBS 2026] แจ้งเตือนการเปลี่ยนแปลงสถานะ')+' — '+currentESSEmp.name,
       emailBody:sumMsg,
+      attachExcel:true,
+      empName:currentESSEmp.name, empId:currentESSEmp.id||'',
+      attendRows,
     };
     fetch(notifyUrl,{method:'POST',body:JSON.stringify(payload2),mode:'no-cors'}).catch(()=>{});
   }
