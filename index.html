@@ -1080,6 +1080,8 @@ let adminSelectDivision='ALL';
 let adminSelectSection='ALL';
 let adminSelectDept='ALL';
 let systemLock={locked:false,message:''}; // สถานะปิดระบบห้ามแก้ไข — โหลดจาก Config ฝั่ง server ผ่าน getAll
+let essLockedNames=new Set(); // รายชื่อพนักงานที่ถูกล็อกห้ามแก้ไขสถานะตัวเอง (ESS) — โหลดจาก Config ฝั่ง server
+function isEssLockedName(name){ return essLockedNames.has(name); }
 
 // ════ ADMIN PERMISSION SCOPE ════
 // HR / OPS / ACC admin can edit only employees in their own unit.
@@ -1451,6 +1453,19 @@ function findEmployee(){
   setT('essEmpId',emp.id);
   setT('essEmpSection',emp.section||emp.dept||'');
   setT('essEmpRole',emp.role||'');
+  let lockNote=$('essLockNote');
+  if(!lockNote){
+    const card=$('essEmpCard');
+    if(card){ lockNote=document.createElement('div'); lockNote.id='essLockNote'; card.appendChild(lockNote); }
+  }
+  if(lockNote){
+    if(isEssLockedName(emp.name)){
+      lockNote.style.cssText='margin-top:10px;padding:10px 14px;border-radius:10px;background:#FEF2F2;border:1.5px solid #FCA5A5;color:#7F1D1D;font-size:13px;font-weight:600';
+      lockNote.textContent='🔒 บัญชีของคุณถูกผู้ดูแลระบบล็อก ไม่สามารถแก้ไขสถานะวันทำงานเองได้ กรุณาติดต่อผู้ดูแลระบบ';
+    } else {
+      lockNote.textContent=''; lockNote.style.cssText='';
+    }
+  }
   // Hide input, show personal section
   const inputWrap=$('essInputWrap'); if(inputWrap) inputWrap.style.display='none';
   // แสดงปุ่มออกจากระบบบน topbar (ความเป็นส่วนตัวบนเครื่องที่ใช้ร่วมกัน)
@@ -1550,8 +1565,10 @@ function buildESSDayButtons(emp){
     pill.className='day-pill '+(PILL_MAP[s]||'dp-blank');
     pill.textContent=s||'·';
     pill.title=`${d.getDate()} ${TH_MONTHS[d.getMonth()]} — คลิกเพื่อเปลี่ยนสถานะ`;
+    if(isEssLockedName(emp.name)){ pill.disabled=true; pill.style.opacity='.55'; pill.style.cursor='not-allowed'; pill.title='🔒 ผู้ดูแลระบบล็อกไม่ให้แก้ไขสถานะของคุณเอง'; }
     pill.onclick=()=>{
       if(!assertSystemNotLocked()) return;
+      if(isEssLockedName(emp.name)){ toast('🔒 บัญชีของคุณถูกล็อก ไม่สามารถแก้ไขสถานะเองได้ กรุณาติดต่อผู้ดูแลระบบ'); return; }
       const cur=attendData[emp.name]?.[k]??'';
       const next=STATES[(STATES.indexOf(cur)+1)%STATES.length];
       if(!attendData[emp.name])attendData[emp.name]={};
@@ -1600,6 +1617,7 @@ function updateESSSummary(emp){
 async function saveESSData(){
   if(!currentESSEmp)return;
   if(!assertSystemNotLocked())return;
+  if(isEssLockedName(currentESSEmp.name)){ toast('🔒 บัญชีของคุณถูกล็อก ไม่สามารถบันทึกสถานะเองได้ กรุณาติดต่อผู้ดูแลระบบ'); return; }
   // บันทึกเฉพาะวันทำงานของพนักงานคนนี้ทีละช่อง (dk = ISO) — ไม่ bulk ทับข้อมูลคนอื่น
   if(gsConfig.url&&gsConfig.initialized){
     const emp=currentESSEmp;
@@ -2249,16 +2267,19 @@ function buildAdminSelectionPanel(){
           <button class="btn btn-primary btn-sm" onclick="selectAllFilteredEmployees()">เลือกทั้งหมดที่แสดง</button>
           <button class="btn btn-ghost btn-sm" onclick="clearFilteredEmployees()">ล้างเฉพาะที่แสดง</button>
           <button class="btn btn-danger btn-sm" onclick="resetSelectedEmployeesToOn()">↺ Reset On คนที่เลือก</button>
+          <button class="btn btn-sm" style="background:#7F1D1D;color:#fff" onclick="lockSelectedEmployeesEss()">🔒 ล็อกไม่ให้แก้ไขเอง (คนที่เลือก)</button>
+          <button class="btn btn-sm" style="background:#059669;color:#fff" onclick="unlockSelectedEmployeesEss()">🔓 ปลดล็อก (คนที่เลือก)</button>
           <button class="btn btn-success btn-sm" onclick="switchAdminTab('matrix')">ไปตารางรายวัน →</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;max-height:430px;overflow-y:auto;padding-right:4px">
           ${members.map(m=>{
             const checked=selectedEmp.has(m.name);
             const gc=GRP_CSS[m.group]||'b-sml';
+            const locked=isEssLockedName(m.name);
             return `<div class="select-emp-card ${checked?'selected':''}" onclick="toggleSelectedEmployeeCard('${m.name}')">
               <input type="checkbox" ${checked?'checked':''} onclick="event.stopPropagation();toggleSelectedEmployeeCard('${m.name}',this.checked)">
               <div style="flex:1;min-width:0">
-                <div style="font-size:13px;font-weight:700;color:var(--g8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.name}</div>
+                <div style="font-size:13px;font-weight:700;color:var(--g8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${locked?'🔒 ':''}${m.name}</div>
                 <div style="font-size:11px;color:var(--g5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.id} · ${[m.division,m.section,m.dept].filter(Boolean).join(' / ')} · ${m.role||''}</div>
               </div>
               <span class="badge ${gc}">${m.group}</span>
@@ -2504,6 +2525,29 @@ function resetSelectedEmployeesToOff(){
   if(!names.length){toast('กรุณาติ๊กเลือกพนักงานก่อน');return;}
   if(!confirm(`ยืนยัน Reset พนักงาน ${names.length} คน เป็น Off?`)) return;
   if(setStatusForNames(names,'Off')) toast(`Reset เป็น Off แล้ว ${names.length} คน ✓`);
+}
+
+async function setEssLockOnServer(names,locked){
+  if(!gsConfig.url){toast('กรุณาเชื่อม Google Sheets / Web App ก่อน');return false;}
+  try{
+    await fetch(gsConfig.url,{method:'POST',body:JSON.stringify({action:'setEssLock',names,locked,updateBy:AUTH.name||'System Admin'}),mode:'no-cors'});
+    names.forEach(n=>locked?essLockedNames.add(n):essLockedNames.delete(n));
+    return true;
+  }catch(e){toast('ส่งคำสั่งล็อกไปยัง Google ล้มเหลว');return false;}
+}
+
+async function lockSelectedEmployeesEss(){
+  const names=getResetTargetNames();
+  if(!names.length){toast('กรุณาติ๊กเลือกพนักงานก่อน');return;}
+  if(!confirm(`ยืนยันล็อกพนักงาน ${names.length} คน ไม่ให้แก้ไขสถานะวันทำงานเอง (ESS)?`)) return;
+  if(await setEssLockOnServer(names,true)){ toast(`ล็อก ESS แล้ว ${names.length} คน 🔒`); buildAdminSelectionPanel(); }
+}
+
+async function unlockSelectedEmployeesEss(){
+  const names=getResetTargetNames();
+  if(!names.length){toast('กรุณาติ๊กเลือกพนักงานก่อน');return;}
+  if(!confirm(`ยืนยันปลดล็อกพนักงาน ${names.length} คน ให้แก้ไขสถานะวันทำงานเองได้?`)) return;
+  if(await setEssLockOnServer(names,false)){ toast(`ปลดล็อก ESS แล้ว ${names.length} คน 🔓`); buildAdminSelectionPanel(); }
 }
 
 function clearSelectedEmployeesStatus(){
@@ -2855,6 +2899,7 @@ async function loadFromGoogleDb(silent=false){
       systemLock.locked=!!data.config.systemLocked;
       systemLock.message=data.config.systemLockMsg||'';
       renderSystemLockBanner();
+      essLockedNames=new Set(Array.isArray(data.config.essLockedNames)?data.config.essLockedNames:[]);
     }
 
     const gEmps=(data.employees||[]).map(mapGoogleEmployee).filter(e=>e.id||e.name);
@@ -3898,6 +3943,8 @@ window.selectAllFilteredEmployees = typeof selectAllFilteredEmployees !== "undef
 window.clearFilteredEmployees = typeof clearFilteredEmployees !== "undefined" ? clearFilteredEmployees : function(){};
 window.resetSelectedEmployeesToOn = typeof resetSelectedEmployeesToOn !== "undefined" ? resetSelectedEmployeesToOn : function(){};
 window.clearSelectedEmployeesStatus = typeof clearSelectedEmployeesStatus !== "undefined" ? clearSelectedEmployeesStatus : function(){};
+window.lockSelectedEmployeesEss = typeof lockSelectedEmployeesEss !== "undefined" ? lockSelectedEmployeesEss : function(){};
+window.unlockSelectedEmployeesEss = typeof unlockSelectedEmployeesEss !== "undefined" ? unlockSelectedEmployeesEss : function(){};
 window.renderBulkBar = typeof renderBulkBar !== "undefined" ? renderBulkBar : function(){};
 
 window.onEmpManageDivisionChange = typeof onEmpManageDivisionChange !== "undefined" ? onEmpManageDivisionChange : function(){};
