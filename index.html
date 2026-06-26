@@ -824,7 +824,7 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
 📋 สถานะ: {newState}
 ✏ โดย: {via}
 ⏰ เวลาส่ง: {sentAt}
-🔗 ตรวจสอบข้อมูล: {link}</textarea>
+📎 ดูรายละเอียดในไฟล์ Excel ที่แนบมากับอีเมล</textarea>
             </div>
           </div>
         </div>
@@ -1033,6 +1033,7 @@ let attendData={};
 let selectedEmp=new Set();
 let currentDef='On';
 let currentESSEmp=null;
+let essOrigAttend={}; // snapshot สถานะ "เดิม" ของพนักงานคนที่กำลังแก้ไข ก่อนแก้ไขรอบนี้ — ใช้เทียบ เดิม/ใหม่ ในไฟล์ Excel
 let gsConfig={url:DEFAULT_GS_URL,enabled:true,initialized:true,sheetUrl:''};
 let AUTH={unit:null,name:'',isAdmin:false};
 let selectedRows=new Set();
@@ -1407,6 +1408,8 @@ function findEmployee(){
   });
   buildESSDayGrid(emp);
   updateESSSummary(emp);
+  // เก็บภาพสถานะ "เดิม" ไว้ก่อนเริ่มแก้ไขรอบนี้ ใช้เทียบ เดิม/ใหม่ ตอนสร้างไฟล์ Excel
+  essOrigAttend=JSON.parse(JSON.stringify(attendData[emp.name]||{}));
   // Build public dashboard too
   buildPublicDashboard();
 }
@@ -1559,11 +1562,18 @@ async function saveESSData(){
   const notifyUrl=cfg2.gsUrl||gsConfig.url||DEFAULT_GS_URL||'';
   if(notifyUrl && currentESSEmp){
     const sumMsg=buildSaveNotifyMsg(currentESSEmp);
-    const attendRows=days.filter(d=>!isOff(d)).map(d=>({
-      date:dateKey(d),
-      dateLabel:`${d.getDate()} ${TH_MONTHS[d.getMonth()]} ${d.getFullYear()+543}`,
-      status:attendData[currentESSEmp.name]?.[dateKey(d)]||''
-    }));
+    const attendRows=days.filter(d=>!isOff(d)).map(d=>{
+      const k=dateKey(d);
+      const newSt=attendData[currentESSEmp.name]?.[k]||'';
+      const oldSt=essOrigAttend?.[k]||'';
+      return {
+        date:k,
+        dateLabel:`${d.getDate()} ${TH_MONTHS[d.getMonth()]} ${d.getFullYear()+543}`,
+        oldStatus:oldSt,
+        status:newSt,
+        changed:oldSt!==newSt
+      };
+    });
     const payload2={
       action:'notify',
       lineEnabled:cfg2.lineEnabled,
@@ -1577,6 +1587,8 @@ async function saveESSData(){
       attendRows,
     };
     fetch(notifyUrl,{method:'POST',body:JSON.stringify(payload2),mode:'no-cors'}).catch(()=>{});
+    // อัปเดต snapshot "เดิม" เป็นค่าที่บันทึกรอบนี้ เพื่อให้การบันทึกครั้งถัดไปเทียบจากจุดนี้
+    essOrigAttend=JSON.parse(JSON.stringify(attendData[currentESSEmp.name]||{}));
   }
   // ดึงข้อมูลล่าสุดจาก Google มายืนยัน (ช่องที่ยังไม่ยืนยันถูกคงไว้ด้วย reconcilePending)
   if(gsConfig.url){ setTimeout(()=>loadFromGoogleDb(true), 1200); }
@@ -1600,7 +1612,7 @@ function buildSaveNotifyMsg(emp){
 📊 % มาทำงาน: ${pct}%
 ──────────────────
 บันทึกเมื่อ: ${now.getDate()} ${TH_MONTHS[now.getMonth()]} ${now.getFullYear()+543} ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')} น.
-${(gsUrlBase?gsUrlBase():(gsConfig.url||DEFAULT_GS_URL||''))?`🔗 ตรวจสอบข้อมูล: ${gsUrlBase?gsUrlBase():(gsConfig.url||DEFAULT_GS_URL||'')}`:''}`;
+📎 ดูตารางเปรียบเทียบสถานะ (เดิม/ใหม่) รายวันได้ในไฟล์ Excel ที่แนบมา`;
 }
 
 // ════════════════════════════════════════════════════════════
@@ -3285,7 +3297,6 @@ function buildNotifyMsg(emp, date, oldState, newState, via){
   const timeStr = now.getHours()+':'+String(now.getMinutes()).padStart(2,'0')+' น.';
   const dateStr = date.getDate()+' '+TH_MONTHS[date.getMonth()]+' '+(date.getFullYear()+543);
   const sentAtStr = now.getDate()+' '+TH_MONTHS[now.getMonth()]+' '+(now.getFullYear()+543)+' '+timeStr;
-  const link = gsUrlBase ? gsUrlBase() : (gsConfig.url||DEFAULT_GS_URL||'');
   const os = STATE_TH_N[oldState]||oldState||'—';
   const ns = STATE_TH_N[newState]||newState||'—';
   const viaStr = via||'พนักงาน';
@@ -3294,7 +3305,7 @@ function buildNotifyMsg(emp, date, oldState, newState, via){
            '\nวันที่เปลี่ยนแปลง: '+dateStr+
            '\n'+os+' → '+ns+
            '\nเวลาส่ง: '+sentAtStr+
-           (link?'\nตรวจสอบข้อมูล: '+link:'');
+           '\n📎 ดูรายละเอียดในไฟล์ Excel ที่แนบมากับอีเมล';
   }
   return cfg.lineTemplate
     .replace('{empName}', emp.name||'')
@@ -3304,7 +3315,7 @@ function buildNotifyMsg(emp, date, oldState, newState, via){
     .replace('{newState}', ns)
     .replace('{time}', timeStr)
     .replace('{sentAt}', sentAtStr)
-    .replace('{link}', link)
+    .replace('{link}', '')
     .replace('{via}', viaStr);
 }
 
@@ -3314,7 +3325,6 @@ function buildEmailBody(emp, date, oldState, newState){
   const now=new Date();
   const dateStr=`${date.getDate()} ${TH_MONTHS[date.getMonth()]} ${date.getFullYear()+543}`;
   const sentAtStr=`${now.getDate()} ${TH_MONTHS[now.getMonth()]} ${now.getFullYear()+543} ${now.toLocaleTimeString('th-TH')} น.`;
-  const link = gsUrlBase ? gsUrlBase() : (gsConfig.url||DEFAULT_GS_URL||'');
   return `แจ้งการเปลี่ยนแปลงสถานะ — Temporary Business Suspension (75% Compensation) 2026
 
 พนักงาน : ${emp.name} (${emp.id})
@@ -3325,7 +3335,8 @@ function buildEmailBody(emp, date, oldState, newState){
 สถานะใหม่        : ${STATE_TH_N[newState]||newState||'—'}
 บันทึกโดย        : ${AUTH.name||'พนักงาน'}
 เวลาส่ง          : ${sentAtStr}
-${link?`ตรวจสอบข้อมูล    : ${link}\n`:''}
+📎 รายละเอียดและตารางเปรียบเทียบ (เดิม/ใหม่) อยู่ในไฟล์ Excel ที่แนบมากับอีเมลนี้
+
 ──────────────────────────────
 ระบบ Temporary Business Suspension (75% Compensation) 2026
 บริษัท สยามกลการโลจิสติกส์ จำกัด (SML)`;
