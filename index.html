@@ -444,6 +444,20 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
             <button id="pubClearFilter" class="btn btn-ghost btn-xs" onclick="clearPublicFilter()" style="display:none;white-space:nowrap">✕ ล้างตัวกรอง</button>
           </div>
         </div>
+        <div class="filter-row" style="border-top:1px solid var(--g2);flex-wrap:wrap;gap:8px;align-items:flex-end">
+          <div class="field" style="min-width:130px">
+            <label>📅 จากวันที่</label>
+            <input type="date" id="pubRangeStart" onchange="onPublicRangeChange()">
+          </div>
+          <div class="field" style="min-width:130px">
+            <label>📅 ถึงวันที่</label>
+            <input type="date" id="pubRangeEnd" onchange="onPublicRangeChange()">
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:8px">
+            <span id="pubRangeNote" style="font-size:11px;color:var(--g5);padding:5px 0;white-space:nowrap"></span>
+            <button id="pubClearRange" class="btn btn-ghost btn-xs" onclick="clearPublicRange()" style="display:none;white-space:nowrap">✕ ล้างช่วงวันที่</button>
+          </div>
+        </div>
       </div>
 
       <!-- KPI Cards หลัก -->
@@ -3583,7 +3597,46 @@ function resetESS(){
 }
 
 const PUBLIC_FILTER_KEY='moo75_public_filter_v1';
-const publicFilter={section:'',group:'',division:'',dept:'',company:'',search:''};
+const publicFilter={section:'',group:'',division:'',dept:'',company:'',search:'',rangeStart:'',rangeEnd:''};
+
+// จำกัดช่วงวันที่ที่พนักงานเลือกดูได้ ให้อยู่ในช่วงที่ System Admin ตั้งไว้เท่านั้น (startDate/endDate)
+function applyPublicRangeBounds(){
+  if(!days.length) return;
+  const minKey=dateKey(days[0]), maxKey=dateKey(days[days.length-1]);
+  ['pubRangeStart','pubRangeEnd'].forEach(id=>{
+    const el=$(id); if(!el) return;
+    el.min=minKey; el.max=maxKey;
+  });
+  const rs=$('pubRangeStart'), re=$('pubRangeEnd');
+  if(rs) rs.value=publicFilter.rangeStart||'';
+  if(re) re.value=publicFilter.rangeEnd||'';
+  const note=$('pubRangeNote');
+  if(note) note.textContent=`ช่วงที่เลือกได้: ${thDate(days[0])} – ${thDate(days[days.length-1])}`;
+  const clearBtn=$('pubClearRange');
+  if(clearBtn) clearBtn.style.display=(publicFilter.rangeStart||publicFilter.rangeEnd)?'inline-flex':'none';
+}
+
+function onPublicRangeChange(){
+  if(!days.length) return;
+  const minKey=dateKey(days[0]), maxKey=dateKey(days[days.length-1]);
+  let rs=$('pubRangeStart')?.value||'';
+  let re=$('pubRangeEnd')?.value||'';
+  // จำกัดให้อยู่ในช่วงที่ admin ตั้งไว้เท่านั้น
+  if(rs && rs<minKey) rs=minKey;
+  if(rs && rs>maxKey) rs=maxKey;
+  if(re && re<minKey) re=minKey;
+  if(re && re>maxKey) re=maxKey;
+  if(rs && re && rs>re){ const t=rs; rs=re; re=t; }
+  publicFilter.rangeStart=rs;
+  publicFilter.rangeEnd=re;
+  buildPublicDashboard();
+}
+
+function clearPublicRange(){
+  publicFilter.rangeStart='';
+  publicFilter.rangeEnd='';
+  buildPublicDashboard();
+}
 
 function loadPublicFilter(){
   // โหลดเฉพาะค่า search เข้า input เท่านั้น
@@ -3666,6 +3719,7 @@ function clearPublicFilter(){
 function buildPublicDashboard(){
   // ไม่เรียก loadPublicFilter() ที่นี่ เพื่อไม่ให้ filter หน่วยงานถูกล้างตอน re-render
   fillPublicFilters();
+  applyPublicRangeBounds();
   const members = getPublicMembers();
   const workdays = days.filter(d=>!isOff(d));
   // localDateKey: ใช้ local time ไม่ใช่ UTC เพื่อแก้ปัญหา timezone ไทย (UTC+7)
@@ -3673,16 +3727,35 @@ function buildPublicDashboard(){
     const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
     return `${y}-${m}-${dd}`;
   };
+  // ถ้าผู้ใช้เลือกช่วงวันที่เอง (อยู่ในขอบเขตที่ admin ตั้งไว้เท่านั้น) ให้รวมสถิติของทุกวันในช่วงนั้น
+  const hasCustomRange = !!(publicFilter.rangeStart && publicFilter.rangeEnd);
+  const rangeDays = hasCustomRange
+    ? workdays.filter(d=>{ const k=dateKey(d); return k>=publicFilter.rangeStart && k<=publicFilter.rangeEnd; })
+    : [];
   const today = new Date();
   const todayLocalKey = localDateKey(today);
   // หาวันนี้ใน days array โดยเทียบ local date
   const todayDay = workdays.find(d=>localDateKey(d)===todayLocalKey);
   const todayIsWorkday = !!todayDay;
-  // ถ้าวันนี้เป็นวันทำงาน → แสดงสถิติวันนี้วันเดียว
-  // ถ้าไม่ใช่ → แสดงจำนวนคนรวม (ไม่นับทุกวัน เพราะจะเป็นตัวเลขสูงผิดปกติ)
-  let tOn=0, tOff=0, tLeave=0;
-  if(todayIsWorkday){
-    // นับเฉพาะวันนี้
+  let tOn=0, tOff=0, tLeave=0, pct=0;
+  const total = members.length;
+  if(hasCustomRange){
+    // รวมสถิติทุกวันในช่วงที่เลือก (ภายในขอบเขตที่ admin ตั้งไว้)
+    rangeDays.forEach(d=>{
+      const k=dateKey(d);
+      members.forEach(m=>{
+        if(!attendData[m.name]) attendData[m.name]={};
+        if(attendData[m.name][k]===undefined) attendData[m.name][k]='On';
+        const s=attendData[m.name]?.[k]??'On';
+        if(s==='On') tOn++;
+        else if(s==='Off') tOff++;
+        else if(s==='พร.'||s==='กิจ'||s==='ป่วย') tLeave++;
+      });
+    });
+    const totalPossible = total*rangeDays.length;
+    pct = totalPossible>0 ? Math.round(tOn/totalPossible*100) : 0;
+  } else if(todayIsWorkday){
+    // ถ้าวันนี้เป็นวันทำงาน → แสดงสถิติวันนี้วันเดียว
     const k=dateKey(todayDay);
     members.forEach(m=>{
       if(!attendData[m.name]) attendData[m.name]={};
@@ -3692,12 +3765,11 @@ function buildPublicDashboard(){
       else if(s==='Off') tOff++;
       else if(s==='พร.'||s==='กิจ'||s==='ป่วย') tLeave++;
     });
+    pct = total>0 ? Math.round(tOn/total*100) : 0;
   } else {
-    // ไม่ใช่วันทำงาน → แสดงจำนวนพนักงานทั้งหมดใน filter เท่านั้น ไม่นับสถานะ
-    tOn=0; tOff=0; tLeave=0;
+    // ไม่ใช่วันทำงาน และไม่ได้เลือกช่วงเอง → แสดงจำนวนพนักงานทั้งหมดใน filter เท่านั้น ไม่นับสถานะ
+    tOn=0; tOff=0; tLeave=0; pct=0;
   }
-  const total = members.length;
-  const pct = todayIsWorkday && total>0 ? Math.round(tOn/total*100) : 0;
   const safe = (id,v)=>{ const e=$(id); if(e) e.textContent=v; };
   safe('pubKOn', tOn);
   // sub label ใต้ตัวเลข On — แสดงหน่วยงานที่กรอง
@@ -3709,8 +3781,8 @@ function buildPublicDashboard(){
   safe('pubKOff', tOff);
   safe('pubKLeave', tLeave);
   safe('pubKPct', pct+'%');
-  safe('pubKTotal2', total + ' คน' + (todayIsWorkday ? '' : ' (วันหยุด)'));
-  safe('pubKDays', workdays.length + ' วันทำงาน');
+  safe('pubKTotal2', total + ' คน' + (hasCustomRange || todayIsWorkday ? '' : ' (วันหยุด)'));
+  safe('pubKDays', (hasCustomRange?rangeDays.length:workdays.length) + ' วันทำงาน');
   // Progress bar
   const bar=$('pubProgressBar'); if(bar) bar.style.width=pct+'%';
   // Filter label — แสดงชื่อหน่วยงานที่กรองอยู่
@@ -3731,7 +3803,14 @@ function buildPublicDashboard(){
     const sd=days[0], ed=days[days.length-1];
     const pn=($('periodName')||{value:''}).value||'ช่วงเวลา';
     const pl=$('pubPeriodLabel');
-    const dayLabel = todayIsWorkday ? `ข้อมูลวันนี้ · ${thDate(todayDay)}` : `วันหยุด · ${pn} ${thDate(sd)}–${thDate(ed)}`;
+    let dayLabel;
+    if(hasCustomRange && rangeDays.length){
+      dayLabel = `ช่วงที่เลือก · ${thDate(rangeDays[0])}–${thDate(rangeDays[rangeDays.length-1])}`;
+    } else if(todayIsWorkday){
+      dayLabel = `ข้อมูลวันนี้ · ${thDate(todayDay)}`;
+    } else {
+      dayLabel = `วันหยุด · ${pn} ${thDate(sd)}–${thDate(ed)}`;
+    }
     if(pl) pl.textContent=dayLabel;
   }
   // Sync time indicator
@@ -3750,6 +3829,8 @@ function buildPublicDashboard(){
 }
 window.onPublicFilterChange = onPublicFilterChange;
 window.clearPublicFilter = clearPublicFilter;
+window.onPublicRangeChange = onPublicRangeChange;
+window.clearPublicRange = clearPublicRange;
 window.buildESSMatrix = buildESSMatrix;
 window.buildPublicDashboard = buildPublicDashboard;
 window.saveNotifyConfig = saveNotifyConfig;
