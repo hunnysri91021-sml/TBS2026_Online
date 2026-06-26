@@ -413,9 +413,9 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
       <div class="card" style="margin-bottom:12px;overflow:hidden">
         <div class="filter-row" style="border-bottom:none;flex-wrap:wrap;gap:8px;align-items:flex-end">
           <div class="field" style="min-width:120px">
-            <label>🔹 ส่วน</label>
+            <label>🔹 แผนก</label>
             <select id="pubSection" onchange="onPublicFilterChange('section')">
-              <option value="">ทุกส่วน</option>
+              <option value="">ทุกแผนก</option>
             </select>
           </div>
           <div class="field" style="min-width:120px">
@@ -425,9 +425,9 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
             </select>
           </div>
           <div class="field" style="min-width:140px">
-            <label>📂 ฝ่าย</label>
+            <label>📂 ส่วน</label>
             <select id="pubDivision" onchange="onPublicFilterChange('division')">
-              <option value="">ทุกฝ่าย</option>
+              <option value="">ทุกส่วน</option>
             </select>
           </div>
           <div class="field" style="min-width:120px">
@@ -566,9 +566,9 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
       <!-- Filter selects row -->
       <div class="filter-row" style="padding-top:6px;border-top:1px solid var(--g2);flex-wrap:wrap;gap:8px">
         <div class="field" style="min-width:120px">
-          <label>🔹 ส่วน (Section)</label>
+          <label>🔹 แผนก (Section)</label>
           <select id="ovSection" onchange="onFilterChange('section')">
-            <option value="">ทุกส่วน</option>
+            <option value="">ทุกแผนก</option>
           </select>
         </div>
         <div class="field" style="min-width:120px">
@@ -578,15 +578,15 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
           </select>
         </div>
         <div class="field" style="min-width:140px">
-          <label>📂 ฝ่าย (Division)</label>
+          <label>📂 ส่วน (Division)</label>
           <select id="ovDivision" onchange="onFilterChange('division')">
-            <option value="">ทุกฝ่าย</option>
+            <option value="">ทุกส่วน</option>
           </select>
         </div>
         <div class="field" style="min-width:120px">
-          <label>🗂 แผนก (Dept)</label>
+          <label>🗂 ฝ่าย (Dept)</label>
           <select id="ovDept" onchange="onFilterChange('dept')">
-            <option value="">ทุกแผนก</option>
+            <option value="">ทุกฝ่าย</option>
           </select>
         </div>
         <div class="field" style="min-width:110px">
@@ -931,17 +931,17 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
               <option value="STC">STC</option>
             </select>
           </div>
-          <div class="field"><label>ฝ่าย</label>
+          <div class="field"><label>ส่วน</label>
             <select id="empManageDivision" onchange="onEmpManageDivisionChange()">
               <option value="HR&GA">HR&GA (ทรัพยากรบุคคลฯ)</option>
               <option value="Operations">Operations (PDI/YARD/Accessories)</option>
               <option value="Finance">บัญชีและการเงิน</option>
             </select>
           </div>
-          <div class="field"><label>ส่วน</label>
+          <div class="field"><label>แผนก</label>
             <select id="empManageSection"></select>
           </div>
-          <div class="field"><label>แผนก</label><input id="empManageDept" type="text" placeholder="เช่น HR&GA / Operations / Finance"></div>
+          <div class="field"><label>ฝ่าย</label><input id="empManageDept" type="text" placeholder="เช่น HR&GA / Operations / Finance"></div>
           <div class="field" style="grid-column:1/-1"><label>ตำแหน่ง</label><input id="empManageRole" type="text" placeholder="ตำแหน่งงาน"></div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
@@ -1647,7 +1647,7 @@ function buildSaveNotifyMsg(emp){
   const now=new Date();
   return `[TBS 2026] 📋 บันทึกสถานะแล้ว
 พนักงาน: ${emp.name} (${emp.id})
-ส่วน: ${emp.section||''} · ${emp.group||''}
+แผนก: ${emp.section||''} · ${emp.group||''}
 ──────────────────
 ✓ มาทำงาน (On): ${on} วัน
 ✕ หยุด 75% (Off): ${off} วัน
@@ -1781,8 +1781,8 @@ function fillOvDropdowns(){
 function fillDropdown(id, options, current){
   const sel=$(id); if(!sel) return;
   const labels = {
-    ovSection:'ทุกส่วน', ovGroup:'ทุกกลุ่ม', ovDivision:'ทุกฝ่าย', ovDept:'ทุกแผนก', ovCompany:'ทุกบริษัท',
-    pubSection:'ทุกส่วน', pubGroup:'ทุกกลุ่ม', pubDivision:'ทุกฝ่าย', pubDept:'ทุกแผนก', pubCompany:'ทุกบริษัท'
+    ovSection:'ทุกแผนก', ovGroup:'ทุกกลุ่ม', ovDivision:'ทุกส่วน', ovDept:'ทุกฝ่าย', ovCompany:'ทุกบริษัท',
+    pubSection:'ทุกแผนก', pubGroup:'ทุกกลุ่ม', pubDivision:'ทุกส่วน', pubDept:'ทุกฝ่าย', pubCompany:'ทุกบริษัท'
   };
   sel.innerHTML = `<option value="">${labels[id]||'ทั้งหมด'}</option>`;
   options.forEach(v=>{const o=new Option(v,v);if(v===current)o.selected=true;sel.appendChild(o);});
@@ -1818,7 +1818,7 @@ function updateFilterChips(){
   const chips=$('filterChips'); const clearBtn=$('btnClearFilter');
   if(!chips) return;
   chips.innerHTML='';
-  const labels = {section:'ส่วน',group:'กลุ่ม',division:'ฝ่าย',dept:'แผนก',company:'บริษัท',search:'ค้นหา'};
+  const labels = {section:'แผนก',group:'กลุ่ม',division:'ส่วน',dept:'ฝ่าย',company:'บริษัท',search:'ค้นหา'};
   let hasFilter=false;
   Object.entries(ovFilter).forEach(([k,v])=>{
     if(!v) return;
@@ -2211,20 +2211,20 @@ function buildAdminSelectionPanel(){
             <select id="adminSelectGroup" onchange="onSelectGroupChange()">${optHtml(fOpts.groups,adminSelectGroup)}</select>
           </div>
           <div class="field" style="min-width:130px">
-            <label>📂 ฝ่าย (Division)</label>
+            <label>📂 ส่วน (Division)</label>
             <select id="adminSelectDivision" onchange="onSelectDivisionChange()">${optHtml(fOpts.divisions,adminSelectDivision)}</select>
           </div>
           <div class="field" style="min-width:130px">
-            <label>🔹 ส่วน (Section)</label>
+            <label>🔹 แผนก (Section)</label>
             <select id="adminSelectSection" onchange="onSelectSectionChange()">${optHtml(fOpts.sections,adminSelectSection)}</select>
           </div>
           <div class="field" style="min-width:130px">
-            <label>🗂 แผนก (Dept)</label>
+            <label>🗂 ฝ่าย (Dept)</label>
             <select id="adminSelectDept" onchange="onSelectDeptChange()">${optHtml(fOpts.depts,adminSelectDept)}</select>
           </div>
           <div class="field" style="flex:1;min-width:200px">
             <label>ค้นหาพนักงาน</label>
-            <input id="adminSelectSearch" value="${adminSelectSearch||''}" placeholder="ชื่อ / รหัส / ส่วน / ตำแหน่ง" oninput="onSelectSearchChange()">
+            <input id="adminSelectSearch" value="${adminSelectSearch||''}" placeholder="ชื่อ / รหัส / แผนก / ตำแหน่ง" oninput="onSelectSearchChange()">
           </div>
         </div>
         <div class="action-row" style="margin-bottom:12px">
@@ -3165,7 +3165,7 @@ function exportExcel(){
     // SHEET 1: ตารางรายวัน (styled)
     // ══════════════════════════════════════════════════════
     const ws1 = {};
-    const FIXED_COLS = ['ชื่อ-นามสกุล','รหัส','บริษัท','หน่วยงาน','ฝ่าย','ส่วน','แผนก','ตำแหน่ง'];
+    const FIXED_COLS = ['ชื่อ-นามสกุล','รหัส','บริษัท','หน่วยงาน','ส่วน','แผนก','ฝ่าย','ตำแหน่ง'];
     const nFixed = FIXED_COLS.length;
     // Row 1: title
     const titleText = `รายงานการลงชื่อมาทำงาน · ${pname} · ${thDate(sd)}–${thDate(ed)}`;
@@ -3240,7 +3240,7 @@ function exportExcel(){
     // ══════════════════════════════════════════════════════
     const ws2={};
     ws2['A1']={v:`สรุปการมาทำงาน · ${pname} · ${thDate(sd)}–${thDate(ed)}`,t:'s',s:{font:{name:'Sarabun',sz:13,bold:true,color:{rgb:'FFFFFF'}},fill:{patternType:'solid',...FILL.header},alignment:{horizontal:'left',vertical:'center'}}};
-    const H2=['ชื่อ-นามสกุล','รหัส','บริษัท','หน่วยงาน','ฝ่าย','ส่วน','แผนก','วันทำงาน','On','Off','พร.','กิจ','ป่วย','%On','สถานะภาพรวม'];
+    const H2=['ชื่อ-นามสกุล','รหัส','บริษัท','หน่วยงาน','ส่วน','แผนก','ฝ่าย','วันทำงาน','On','Off','พร.','กิจ','ป่วย','%On','สถานะภาพรวม'];
     H2.forEach((h,ci)=>{
       ws2[XLSX.utils.encode_cell({r:1,c:ci})]=cell(h,dateHeaderFill,{bold:true,color:{rgb:'FFFFFF'}},'center');
     });
@@ -3439,7 +3439,7 @@ function buildEmailBody(emp, date, oldState, newState){
   return `แจ้งการเปลี่ยนแปลงสถานะ — Temporary Business Suspension (75% Compensation) 2026
 
 พนักงาน : ${emp.name} (${emp.id})
-ส่วน/แผนก: ${emp.section||emp.dept||''}  ·  บริษัท: ${emp.group||''}
+แผนก/ฝ่าย: ${emp.section||emp.dept||''}  ·  บริษัท: ${emp.group||''}
 
 วันที่เปลี่ยนแปลง : ${dateStr}
 สถานะเดิม        : ${STATE_TH_N[oldState]||oldState||'—'}
@@ -3586,7 +3586,7 @@ function savePublicFilter(){
 
 function fillPublicDropdown(id, options, current){
   const sel=$(id); if(!sel) return;
-  const labels={pubSection:'ทุกส่วน',pubGroup:'ทุกกลุ่ม',pubDivision:'ทุกฝ่าย',pubDept:'ทุกแผนก',pubCompany:'ทุกบริษัท'};
+  const labels={pubSection:'ทุกแผนก',pubGroup:'ทุกกลุ่ม',pubDivision:'ทุกส่วน',pubDept:'ทุกฝ่าย',pubCompany:'ทุกบริษัท'};
   sel.innerHTML=`<option value="">${labels[id]||'ทั้งหมด'}</option>`;
   options.forEach(v=>{
     const o=new Option(v,v);
