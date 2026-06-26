@@ -259,6 +259,8 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
 </head>
 <body>
 
+<div id="systemLockBanner" style="display:none;background:#DC2626;color:#fff;font-weight:700;font-size:13px;text-align:center;padding:10px 14px;letter-spacing:.3px"></div>
+
 <!-- ══════════════════════════════════════
      TOP BAR
 ══════════════════════════════════════ -->
@@ -702,6 +704,21 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
 
   <!-- ── CONFIG TAB ── -->
   <div id="tabConfig" style="display:none" class="main">
+    <div class="card" style="margin-bottom:14px;border:1.5px solid #FCA5A5">
+      <div class="card-hdr"><div class="card-title">🔒 ปิดระบบห้ามแก้ไขข้อมูล</div></div>
+      <div class="card-body">
+        <div class="note-box" style="margin-top:0">เมื่อปิดระบบ พนักงานและแอดมินทุกฝ่ายจะ<strong>ไม่สามารถบันทึก/แก้ไขข้อมูลการเข้างานได้</strong> — จะเห็นข้อความแจ้งเตือนแทน ใช้สำหรับช่วงสรุปข้อมูลก่อนส่งผู้บริหาร</div>
+        <div class="field" style="margin-bottom:12px">
+          <label>ข้อความแจ้งเตือนที่จะแสดงให้พนักงาน/แอดมินเห็น</label>
+          <input type="text" id="systemLockMsgInput" placeholder="ระบบถูกปิดชั่วคราวโดยผู้ดูแลระบบ ไม่สามารถแก้ไขข้อมูลได้ในขณะนี้">
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-danger btn-sm" id="btnLockSystem" onclick="toggleSystemLock(true)">🔒 ปิดระบบ ห้ามแก้ไข</button>
+          <button class="btn btn-success btn-sm" id="btnUnlockSystem" onclick="toggleSystemLock(false)">🔓 เปิดระบบ ให้แก้ไขได้</button>
+          <span id="systemLockStatusTxt" style="font-size:12px;font-weight:600"></span>
+        </div>
+      </div>
+    </div>
     <div class="card" style="margin-bottom:14px">
       <div class="card-hdr"><div class="card-title">⚙ ตั้งค่าช่วงเวลา / Default / Reset ระบบ</div></div>
       <div class="card-body">
@@ -1041,6 +1058,7 @@ let ovPeriodMode='month';
 let adminCurrentTab='overview';
 let adminSelectUnit='ALL';
 let adminSelectSearch='';
+let systemLock={locked:false,message:''}; // สถานะปิดระบบห้ามแก้ไข — โหลดจาก Config ฝั่ง server ผ่าน getAll
 
 // ════ ADMIN PERMISSION SCOPE ════
 // HR / OPS / ACC admin can edit only employees in their own unit.
@@ -1069,9 +1087,28 @@ function normalizeAdminSelection(){
   selectedRows=new Set([...selectedRows].filter(n=>allowed.has(n)));
 }
 function assertCanEditEmpName(name){
+  if(!assertSystemNotLocked()) return false;
   const emp=EMPLOYEES.find(e=>e.name===name);
   if(!isEmpAllowed(emp)){ toast('คุณมีสิทธิ์แก้ไขเฉพาะพนักงานในฝ่ายของคุณเท่านั้น'); return false; }
   return true;
+}
+// คืน true ถ้ายังแก้ไขข้อมูลได้ (ระบบไม่ถูกปิด) — ใช้กันก่อนทุกจุดที่แก้ attendData
+function assertSystemNotLocked(){
+  if(systemLock.locked){
+    toast(systemLock.message || 'ระบบถูกปิดชั่วคราว ไม่สามารถแก้ไขข้อมูลได้ในขณะนี้');
+    return false;
+  }
+  return true;
+}
+function renderSystemLockBanner(){
+  const banner=$('systemLockBanner');
+  if(!banner) return;
+  if(systemLock.locked){
+    banner.style.display='block';
+    banner.textContent='🔒 '+(systemLock.message||'ระบบถูกปิดชั่วคราว ไม่สามารถแก้ไขข้อมูลได้ในขณะนี้');
+  } else {
+    banner.style.display='none';
+  }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1493,6 +1530,7 @@ function buildESSDayButtons(emp){
     pill.textContent=s||'·';
     pill.title=`${d.getDate()} ${TH_MONTHS[d.getMonth()]} — คลิกเพื่อเปลี่ยนสถานะ`;
     pill.onclick=()=>{
+      if(!assertSystemNotLocked()) return;
       const cur=attendData[emp.name]?.[k]??'';
       const next=STATES[(STATES.indexOf(cur)+1)%STATES.length];
       if(!attendData[emp.name])attendData[emp.name]={};
@@ -1540,6 +1578,7 @@ function updateESSSummary(emp){
 
 async function saveESSData(){
   if(!currentESSEmp)return;
+  if(!assertSystemNotLocked())return;
   // บันทึกเฉพาะวันทำงานของพนักงานคนนี้ทีละช่อง (dk = ISO) — ไม่ bulk ทับข้อมูลคนอื่น
   if(gsConfig.url&&gsConfig.initialized){
     const emp=currentESSEmp;
@@ -1616,6 +1655,33 @@ function buildSaveNotifyMsg(emp){
 }
 
 // ════════════════════════════════════════════════════════════
+//  SYSTEM LOCK (System Admin เท่านั้น) — ปิดระบบห้ามแก้ไขข้อมูล
+// ════════════════════════════════════════════════════════════
+function renderSystemLockAdminUI(){
+  const txt=$('systemLockStatusTxt');
+  if(txt) txt.textContent=systemLock.locked?'สถานะปัจจุบัน: 🔒 ปิดอยู่':'สถานะปัจจุบัน: 🔓 เปิดอยู่ (แก้ไขได้ปกติ)';
+  if(txt) txt.style.color=systemLock.locked?'#DC2626':'#059669';
+  const msgInput=$('systemLockMsgInput');
+  if(msgInput && !msgInput.value) msgInput.value=systemLock.message||'';
+}
+async function toggleSystemLock(locked){
+  if(!isSystemAdmin()){ toast('ใช้ได้เฉพาะ System Admin เท่านั้น'); return; }
+  if(!gsConfig.url){ toast('ยังไม่ได้ตั้งค่า Google Apps Script URL'); return; }
+  const message=$('systemLockMsgInput')?.value?.trim()||'';
+  if(locked && !confirm('ยืนยันปิดระบบห้ามแก้ไขข้อมูลทั้งระบบ?')) return;
+  try{
+    await fetch(gsConfig.url,{method:'POST',body:JSON.stringify({action:'setSystemLock',locked,message,updateBy:AUTH.name||'System Admin'}),mode:'no-cors'});
+    systemLock.locked=locked;
+    if(message) systemLock.message=message;
+    renderSystemLockBanner();
+    renderSystemLockAdminUI();
+    toast(locked?'ปิดระบบแล้ว — ห้ามแก้ไขข้อมูล':'เปิดระบบแล้ว — แก้ไขข้อมูลได้ตามปกติ');
+  }catch(err){
+    toast('ส่งคำสั่งไม่สำเร็จ: '+err.message);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
 //  ADMIN TABS
 // ════════════════════════════════════════════════════════════
 function switchAdminTab(tab){
@@ -1663,6 +1729,7 @@ function switchAdminTab(tab){
     $('atConfig')?.classList.add('active');
     buildEmpSummary();
     renderHolidayList();
+    renderSystemLockAdminUI();
   }
 }
 
@@ -2720,6 +2787,12 @@ async function loadFromGoogleDb(silent=false){
   try{
     const data=await jsonpGet('getAll');
     if(!data || !data.ok) throw new Error(data?.error||'Google ไม่ตอบกลับ');
+
+    if(data.config){
+      systemLock.locked=!!data.config.systemLocked;
+      systemLock.message=data.config.systemLockMsg||'';
+      renderSystemLockBanner();
+    }
 
     const gEmps=(data.employees||[]).map(mapGoogleEmployee).filter(e=>e.id||e.name);
     if(gEmps.length){
