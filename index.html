@@ -2203,23 +2203,23 @@ function buildAdminSelectionPanel(){
         </div>
         <div class="filter-row" style="padding:0;background:transparent;border-bottom:none;margin-bottom:12px">
           <div class="field" style="min-width:150px">
-            <label>ฝ่าย/ขอบเขต</label>
+            <label>ฝ่าย/ขอบเขต (Unit)</label>
             <select id="adminSelectUnit" onchange="onSelectUnitChange()" ${isSystemAdmin()?'':'disabled'}>${unitOptions}</select>
           </div>
           <div class="field" style="min-width:130px">
-            <label>Group</label>
+            <label>🏢 กลุ่ม (Group)</label>
             <select id="adminSelectGroup" onchange="onSelectGroupChange()">${optHtml(fOpts.groups,adminSelectGroup)}</select>
           </div>
           <div class="field" style="min-width:130px">
-            <label>Division</label>
+            <label>📂 ฝ่าย (Division)</label>
             <select id="adminSelectDivision" onchange="onSelectDivisionChange()">${optHtml(fOpts.divisions,adminSelectDivision)}</select>
           </div>
           <div class="field" style="min-width:130px">
-            <label>Section</label>
+            <label>🔹 ส่วน (Section)</label>
             <select id="adminSelectSection" onchange="onSelectSectionChange()">${optHtml(fOpts.sections,adminSelectSection)}</select>
           </div>
           <div class="field" style="min-width:130px">
-            <label>Department</label>
+            <label>🗂 แผนก (Dept)</label>
             <select id="adminSelectDept" onchange="onSelectDeptChange()">${optHtml(fOpts.depts,adminSelectDept)}</select>
           </div>
           <div class="field" style="flex:1;min-width:200px">
@@ -2241,7 +2241,7 @@ function buildAdminSelectionPanel(){
               <input type="checkbox" ${checked?'checked':''} onclick="event.stopPropagation();toggleSelectedEmployeeCard('${m.name}',this.checked)">
               <div style="flex:1;min-width:0">
                 <div style="font-size:13px;font-weight:700;color:var(--g8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.name}</div>
-                <div style="font-size:11px;color:var(--g5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.id} · ${m.division||''} ${m.section?'/ '+m.section:''} ${m.dept?'/ '+m.dept:''} · ${m.role||''}</div>
+                <div style="font-size:11px;color:var(--g5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.id} · ${[m.division,m.section,m.dept].filter(Boolean).join(' / ')} · ${m.role||''}</div>
               </div>
               <span class="badge ${gc}">${m.group}</span>
             </div>`;
