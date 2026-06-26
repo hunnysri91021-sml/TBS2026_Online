@@ -1058,6 +1058,10 @@ let ovPeriodMode='month';
 let adminCurrentTab='overview';
 let adminSelectUnit='ALL';
 let adminSelectSearch='';
+let adminSelectGroup='ALL';
+let adminSelectDivision='ALL';
+let adminSelectSection='ALL';
+let adminSelectDept='ALL';
 let systemLock={locked:false,message:''}; // สถานะปิดระบบห้ามแก้ไข — โหลดจาก Config ฝั่ง server ผ่าน getAll
 
 // ════ ADMIN PERMISSION SCOPE ════
@@ -2119,6 +2123,10 @@ function getEmployeesByUnit(unit){
 }
 function getSelectFilteredMembers(){
   let members=getEmployeesByUnit(adminSelectUnit||'ALL');
+  if(adminSelectGroup!=='ALL') members=members.filter(e=>(e.group||'')===adminSelectGroup);
+  if(adminSelectDivision!=='ALL') members=members.filter(e=>(e.division||'')===adminSelectDivision);
+  if(adminSelectSection!=='ALL') members=members.filter(e=>(e.section||'')===adminSelectSection);
+  if(adminSelectDept!=='ALL') members=members.filter(e=>(e.dept||'')===adminSelectDept);
   const q=(adminSelectSearch||'').trim().toLowerCase();
   if(q){
     members=members.filter(e=>
@@ -2130,6 +2138,13 @@ function getSelectFilteredMembers(){
   }
   return members;
 }
+// รายชื่อตัวเลือกที่ไม่ซ้ำ ดึงตรงจากข้อมูลพนักงานที่ซิงก์มาจาก Google Sheet (Group/Division/Section/Dept)
+// คำนวณจากขอบเขตฝ่าย (unit) ที่เลือกอยู่ก่อน เพื่อให้ dropdown แสดงเฉพาะค่าที่มีอยู่จริงในขอบเขตนั้น
+function getSelectFilterOptions(){
+  const scoped=getEmployeesByUnit(adminSelectUnit||'ALL');
+  const uniq=key=>[...new Set(scoped.map(e=>e[key]).filter(Boolean))].sort();
+  return { groups:uniq('group'), divisions:uniq('division'), sections:uniq('section'), depts:uniq('dept') };
+}
 function onSelectUnitChange(){
   const v=$('adminSelectUnit')?.value||'ALL';
   if(!isSystemAdmin()){
@@ -2138,12 +2153,17 @@ function onSelectUnitChange(){
     adminSelectUnit=v;
   }
   adminSelectSearch='';
+  adminSelectGroup='ALL'; adminSelectDivision='ALL'; adminSelectSection='ALL'; adminSelectDept='ALL';
   buildAdminSelectionPanel();
 }
 function onSelectSearchChange(){
   adminSelectSearch=$('adminSelectSearch')?.value||'';
   buildAdminSelectionPanel();
 }
+function onSelectGroupChange(){ adminSelectGroup=$('adminSelectGroup')?.value||'ALL'; buildAdminSelectionPanel(); }
+function onSelectDivisionChange(){ adminSelectDivision=$('adminSelectDivision')?.value||'ALL'; buildAdminSelectionPanel(); }
+function onSelectSectionChange(){ adminSelectSection=$('adminSelectSection')?.value||'ALL'; buildAdminSelectionPanel(); }
+function onSelectDeptChange(){ adminSelectDept=$('adminSelectDept')?.value||'ALL'; buildAdminSelectionPanel(); }
 function buildAdminWorkflowSteps(active){
   const defs=[
     {id:'overview',n:'1',t:'เห็นภาพรวม',s:'ตรวจ On/Off และแนวโน้มก่อนแก้ไข'},
@@ -2166,6 +2186,8 @@ function buildAdminSelectionPanel(){
   const unitOptions=isSystemAdmin()
     ? ['ALL','HR','OPS','ACC'].map(u=>`<option value="${u}" ${adminSelectUnit===u?'selected':''}>${unitLabel(u)}</option>`).join('')
     : `<option value="${AUTH.unit}" selected>${unitLabel(AUTH.unit)}</option>`;
+  const fOpts=getSelectFilterOptions();
+  const optHtml=(list,cur)=>'<option value="ALL">ทั้งหมด</option>'+list.map(v=>`<option value="${v}" ${cur===v?'selected':''}>${v}</option>`).join('');
   wrap.innerHTML=`
     ${buildAdminWorkflowSteps('select')}
     <div class="card" style="margin-bottom:14px">
@@ -2180,11 +2202,27 @@ function buildAdminSelectionPanel(){
           <div class="stat-card"><div class="stat-label">วันทำงาน</div><div class="stat-value">${workdays}</div><div class="stat-sub">วันในช่วงเวลา</div></div>
         </div>
         <div class="filter-row" style="padding:0;background:transparent;border-bottom:none;margin-bottom:12px">
-          <div class="field" style="min-width:170px">
+          <div class="field" style="min-width:150px">
             <label>ฝ่าย/ขอบเขต</label>
             <select id="adminSelectUnit" onchange="onSelectUnitChange()" ${isSystemAdmin()?'':'disabled'}>${unitOptions}</select>
           </div>
-          <div class="field" style="flex:1;min-width:220px">
+          <div class="field" style="min-width:130px">
+            <label>Group</label>
+            <select id="adminSelectGroup" onchange="onSelectGroupChange()">${optHtml(fOpts.groups,adminSelectGroup)}</select>
+          </div>
+          <div class="field" style="min-width:130px">
+            <label>Division</label>
+            <select id="adminSelectDivision" onchange="onSelectDivisionChange()">${optHtml(fOpts.divisions,adminSelectDivision)}</select>
+          </div>
+          <div class="field" style="min-width:130px">
+            <label>Section</label>
+            <select id="adminSelectSection" onchange="onSelectSectionChange()">${optHtml(fOpts.sections,adminSelectSection)}</select>
+          </div>
+          <div class="field" style="min-width:130px">
+            <label>Department</label>
+            <select id="adminSelectDept" onchange="onSelectDeptChange()">${optHtml(fOpts.depts,adminSelectDept)}</select>
+          </div>
+          <div class="field" style="flex:1;min-width:200px">
             <label>ค้นหาพนักงาน</label>
             <input id="adminSelectSearch" value="${adminSelectSearch||''}" placeholder="ชื่อ / รหัส / ส่วน / ตำแหน่ง" oninput="onSelectSearchChange()">
           </div>
@@ -2203,7 +2241,7 @@ function buildAdminSelectionPanel(){
               <input type="checkbox" ${checked?'checked':''} onclick="event.stopPropagation();toggleSelectedEmployeeCard('${m.name}',this.checked)">
               <div style="flex:1;min-width:0">
                 <div style="font-size:13px;font-weight:700;color:var(--g8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.name}</div>
-                <div style="font-size:11px;color:var(--g5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.id} · ${m.section||''} · ${m.role||''}</div>
+                <div style="font-size:11px;color:var(--g5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.id} · ${m.division||''} ${m.section?'/ '+m.section:''} ${m.dept?'/ '+m.dept:''} · ${m.role||''}</div>
               </div>
               <span class="badge ${gc}">${m.group}</span>
             </div>`;
@@ -3758,6 +3796,10 @@ window.toggleRealtime = typeof toggleRealtime !== "undefined" ? toggleRealtime :
 // Workflow selection functions exposed for dynamic inline handlers
 window.onSelectUnitChange = typeof onSelectUnitChange !== "undefined" ? onSelectUnitChange : function(){};
 window.onSelectSearchChange = typeof onSelectSearchChange !== "undefined" ? onSelectSearchChange : function(){};
+window.onSelectGroupChange = typeof onSelectGroupChange !== "undefined" ? onSelectGroupChange : function(){};
+window.onSelectDivisionChange = typeof onSelectDivisionChange !== "undefined" ? onSelectDivisionChange : function(){};
+window.onSelectSectionChange = typeof onSelectSectionChange !== "undefined" ? onSelectSectionChange : function(){};
+window.onSelectDeptChange = typeof onSelectDeptChange !== "undefined" ? onSelectDeptChange : function(){};
 window.buildAdminSelectionPanel = typeof buildAdminSelectionPanel !== "undefined" ? buildAdminSelectionPanel : function(){};
 window.toggleSelectedEmployeeCard = typeof toggleSelectedEmployeeCard !== "undefined" ? toggleSelectedEmployeeCard : function(){};
 window.selectAllFilteredEmployees = typeof selectAllFilteredEmployees !== "undefined" ? selectAllFilteredEmployees : function(){};
