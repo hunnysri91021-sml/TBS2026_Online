@@ -651,6 +651,9 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
         <span style="font-size:13px;font-weight:600">⬡ เชื่อมต่อ Google Sheets</span>
         <button class="btn btn-ghost btn-xs" onclick="togglePanel('gsPanel')">✕</button>
       </div>
+      <div id="gsReadOnlyNote" style="display:none;margin:10px 16px 0;font-size:11px;color:var(--g5);background:var(--g1);border:1px solid var(--g2);border-radius:var(--r4);padding:6px 10px">
+        🔒 ดูได้เฉพาะ Log การเชื่อมต่อ — แก้ไขการเชื่อมต่อ Google Sheets ได้เฉพาะ System Admin เท่านั้น
+      </div>
       <div class="gs-steps">
         <div class="gs-row">
           <div class="gs-num">1</div>
@@ -659,7 +662,7 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <input type="text" id="gsUrl" placeholder="https://script.google.com/macros/s/AKfycbybRKPHY9-uUpyGLI_aGXY5vRSbWRbJ5-FoZ3fBapZ5gMXWdA_a8kY8M6pgPFipAh37/exec"
               style="flex:1;min-width:200px;font-family:var(--fn);font-size:12px;padding:7px 10px;border:1.5px solid var(--g3);border-radius:var(--r4);outline:none">
-            <button class="btn btn-outline btn-sm" onclick="testGsConnection()">ทดสอบ</button>
+            <button class="btn btn-outline btn-sm" id="btnGsTest" onclick="testGsConnection()">ทดสอบ</button>
           </div>
           <div id="gsConnResult" style="font-size:11px;margin-top:6px;color:var(--g5)"></div></div>
         </div>
@@ -667,8 +670,8 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
           <div class="gs-num">2</div>
           <div><div class="gs-title">Init & Sync</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-primary btn-sm" onclick="initGSheet()">▶ Init & Sync</button>
-            <button class="btn btn-ghost btn-sm" onclick="forceSyncAll()">↺ Force Sync</button>
+            <button class="btn btn-primary btn-sm" id="btnGsInit" onclick="initGSheet()">▶ Init & Sync</button>
+            <button class="btn btn-ghost btn-sm" id="btnGsForceSync" onclick="forceSyncAll()">↺ Force Sync</button>
           </div></div>
         </div>
         <div class="gs-row">
@@ -1727,6 +1730,7 @@ function switchAdminTab(tab){
     $('tabMatrix').style.display='block';
     $('atMatrix')?.classList.add('active');
     buildEditMatrix();
+    applyGsPanelAccess();
   }
   else if(tab==='config'){
     $('tabConfig').style.display='block';
@@ -2411,6 +2415,13 @@ function buildEmpSummary(){
 
 // Panel toggle
 function togglePanel(id){const el=$(id);if(el)el.classList.toggle('open');}
+
+function applyGsPanelAccess(){
+  const sysAdmin=isSystemAdmin();
+  ['gsUrl','realtimeToggle'].forEach(id=>{const el=$(id); if(el) el.disabled=!sysAdmin;});
+  ['btnGsTest','btnGsInit','btnGsForceSync'].forEach(id=>{const el=$(id); if(el) el.disabled=!sysAdmin;});
+  const note=$('gsReadOnlyNote'); if(note) note.style.display=sysAdmin?'none':'block';
+}
 
 
 // ════════════════════════════════════════════════════════════
