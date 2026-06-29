@@ -533,6 +533,7 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
     <button class="admin-tab active" id="atOverview" onclick="switchAdminTab('overview')">📊 1. ภาพรวม</button>
     <button class="admin-tab" id="atSelect" onclick="switchAdminTab('select')">✅ 2. เลือกพนักงาน</button>
     <button class="admin-tab" id="atMatrix" onclick="switchAdminTab('matrix')">📋 3. ตารางรายวัน</button>
+    <button class="admin-tab" id="atReport" onclick="switchAdminTab('report')">📝 สรุปการแก้ไข</button>
     <button class="admin-tab" id="atHR" onclick="switchAdminTab('HR')" style="display:none">👥 HR&GA</button>
     <button class="admin-tab" id="atOPS" onclick="switchAdminTab('OPS')" style="display:none">🏭 Operation</button>
     <button class="admin-tab" id="atACC" onclick="switchAdminTab('ACC')" style="display:none">💼 บัญชี</button>
@@ -982,6 +983,79 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
       <div class="card-hdr"><div class="card-title">🏢 พนักงานในระบบ</div></div>
       <div class="card-body">
         <div id="empSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── REPORT TAB (สรุปรายการที่แก้ไข) ── -->
+  <div id="tabReport" style="display:none" class="main">
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-hdr">
+        <div class="card-title">📝 สรุปรายการที่แก้ไข</div>
+        <div style="font-size:11px;color:var(--g5)">สรุปสถานะการเข้างานที่ถูกแก้ไข เลือกช่วงเวลาได้ แยกตามฝ่าย และส่งอีเมลได้</div>
+      </div>
+      <div class="card-body">
+        <div class="note-box" style="margin-top:0;background:#EFF6FF;border-color:#BFDBFE;color:#1E3A8A">
+          <span>ⓘ</span>
+          <span>ข้อมูลดึงจาก Google Sheet โดยตรง — รายการที่แสดงคือสถานะที่ถูกบันทึก/แก้ไขในช่วงเวลาที่เลือก จัดกลุ่มแยกตามฝ่าย พร้อมส่งสรุปทางอีเมลให้ผู้บริหารหรือหัวหน้าฝ่ายได้</span>
+        </div>
+        <!-- ช่วงเวลา -->
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+          <div class="field" style="min-width:150px"><label>📅 ตั้งแต่วันที่</label><input type="date" id="repFrom"></div>
+          <div class="field" style="min-width:150px"><label>ถึงวันที่</label><input type="date" id="repTo"></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <button class="btn btn-ghost btn-xs" onclick="setReportPreset('today')">วันนี้</button>
+            <button class="btn btn-ghost btn-xs" onclick="setReportPreset('7d')">7 วันล่าสุด</button>
+            <button class="btn btn-ghost btn-xs" onclick="setReportPreset('month')">เดือนนี้</button>
+            <button class="btn btn-ghost btn-xs" onclick="setReportPreset('period')">ช่วงหยุดกิจการ</button>
+          </div>
+        </div>
+        <!-- ตัวเลือก -->
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:12px;font-size:12px;color:var(--g7)">
+          <div class="field" style="min-width:200px">
+            <label>เกณฑ์ช่วงเวลา</label>
+            <select id="repMode">
+              <option value="edited">ตามเวลาที่แก้ไข (UpdateTime)</option>
+              <option value="date">ตามวันที่ของสถานะ</option>
+            </select>
+          </div>
+          <div class="field" style="min-width:200px">
+            <label>จัดกลุ่มแยกตาม</label>
+            <select id="repGroupBy">
+              <option value="unit">ฝ่าย (HR&GA / Operation / บัญชี)</option>
+              <option value="division">ส่วน (Division)</option>
+              <option value="dept">ฝ่ายย่อย (Dept)</option>
+            </select>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:14px">
+            <input type="checkbox" id="repOnlyChanged" checked> แสดงเฉพาะที่ไม่ใช่ On (Off / ลา)
+          </label>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-primary btn-sm" id="btnRepLoad" onclick="loadReportData()">🔍 ดึงข้อมูลสรุป</button>
+          <button class="btn btn-ghost btn-sm" onclick="copyReportSummary()">📋 คัดลอกสรุป</button>
+          <span id="repStatus" style="font-size:12px;color:var(--g5)"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ผลสรุป -->
+    <div id="repResult"></div>
+
+    <!-- ส่งอีเมล -->
+    <div class="card" id="repEmailCard" style="margin-bottom:14px;display:none">
+      <div class="card-hdr"><div class="card-title">✉ ส่งสรุปทางอีเมล</div></div>
+      <div class="card-body">
+        <div class="form-grid" style="margin-bottom:12px">
+          <div class="field"><label>ส่งไปยัง Email (To)</label><input id="repEmailTo" type="text" placeholder="hr@sml.co.th, manager@sml.co.th"></div>
+          <div class="field"><label>สำเนา (CC)</label><input id="repEmailCc" type="text" placeholder="exec@sml.co.th"></div>
+          <div class="field" style="grid-column:1/-1"><label>หัวข้อ Email</label><input id="repEmailSubject" type="text" value="[TBS 2026] สรุปรายการที่แก้ไข"></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-primary" onclick="sendReportEmail()">📨 ส่งสรุปทางอีเมล</button>
+          <span id="repEmailResult" style="font-size:12px;min-height:16px"></span>
+        </div>
+        <div style="font-size:11px;color:var(--g5);margin-top:8px">ส่งผ่าน Google Apps Script เดียวกับระบบแจ้งเตือน — ตั้งค่า URL ได้ที่แท็บ System Admin</div>
       </div>
     </div>
   </div>
@@ -1745,7 +1819,7 @@ function switchAdminTab(tab){
 
   adminCurrentTab=tab;
   normalizeAdminSelection();
-  ['tabOverview','tabMatrix','tabUnit','tabConfig'].forEach(id=>{const t=$(id);if(t)t.style.display='none';});
+  ['tabOverview','tabMatrix','tabUnit','tabConfig','tabReport'].forEach(id=>{const t=$(id);if(t)t.style.display='none';});
   document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active'));
 
   if(tab==='overview'){
@@ -1763,6 +1837,11 @@ function switchAdminTab(tab){
     $('atMatrix')?.classList.add('active');
     buildEditMatrix();
     applyGsPanelAccess();
+  }
+  else if(tab==='report'){
+    $('tabReport').style.display='block';
+    $('atReport')?.classList.add('active');
+    initReportPanel();
   }
   else if(tab==='config'){
     $('tabConfig').style.display='block';
@@ -3395,6 +3474,216 @@ function exportExcel(){
 
 
 // ════════════════════════════════════════════════════════════
+//  MODIFIED ITEMS SUMMARY — สรุปรายการที่แก้ไข
+//  ดึงข้อมูลจาก Google Sheet → กรองตามช่วงเวลา → จัดกลุ่มแยกตามฝ่าย → ส่งอีเมล
+// ════════════════════════════════════════════════════════════
+let reportRows = [];
+let reportMeta = {from:'',to:'',mode:'edited',groupBy:'unit',onlyChanged:true,total:0};
+
+function escHtml(s){ return String(s==null?'':s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
+function ymd(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function parseInputDate(s,h=12,m=0,sec=0){ const p=String(s||'').split('-'); return new Date(Number(p[0]),Number(p[1])-1,Number(p[2]),h,m,sec); }
+function fmtThai(ymdStr){ if(!ymdStr) return '-'; return thShort(parseInputDate(ymdStr,12)); }
+function fmtDateTime(d){ return d.toLocaleString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}); }
+function statusCounts(list){ const c={}; list.forEach(r=>{c[r.status]=(c[r.status]||0)+1;}); return c; }
+function anyBy(list){ return list.some(r=>r.updatedBy); }
+
+// พนักงาน → รหัสฝ่าย (HR/OPS/ACC/OTHER) เหมือนขอบเขตสิทธิ์ของ admin
+function empUnitOf(emp){
+  if(!emp) return 'OTHER';
+  const sec=emp.section||'';
+  for(const u of ['HR','OPS','ACC']){ if((UNIT_SECTIONS[u]||[]).includes(sec)) return u; }
+  const div=(emp.division||'').toLowerCase();
+  if(div.includes('hr')||div.includes('บุคคล')) return 'HR';
+  if(div.includes('oper')||div.includes('pdi')||div.includes('yard')||div.includes('accessor')) return 'OPS';
+  if(div.includes('fin')||div.includes('บัญชี')||div.includes('การเงิน')) return 'ACC';
+  return 'OTHER';
+}
+function reportGroupKey(emp){
+  const by=reportMeta.groupBy;
+  if(by==='division') return (emp.division||'').trim() || '— ไม่ระบุส่วน —';
+  if(by==='dept') return (emp.dept||'').trim() || '— ไม่ระบุฝ่าย —';
+  return unitLabel(empUnitOf(emp))==='OTHER' ? 'อื่น ๆ' : unitLabel(empUnitOf(emp));
+}
+
+function initReportPanel(){
+  if(!$('repFrom')?.value || !$('repTo')?.value){ setReportPreset('period'); }
+  const cfg=getNotifyConfig();
+  if($('repEmailTo') && !$('repEmailTo').value) $('repEmailTo').value=cfg.emailTo||'';
+  if($('repEmailCc') && !$('repEmailCc').value) $('repEmailCc').value=cfg.emailCc||'';
+}
+
+function setReportPreset(kind){
+  const today=new Date();
+  let from=new Date(today), to=new Date(today);
+  if(kind==='7d'){ from.setDate(today.getDate()-6); }
+  else if(kind==='month'){ from=new Date(today.getFullYear(),today.getMonth(),1); to=new Date(today.getFullYear(),today.getMonth()+1,0); }
+  else if(kind==='period'){
+    const s=$('startDate')?.value, e=$('endDate')?.value;
+    if(s) from=new Date(s+'T12:00:00'); if(e) to=new Date(e+'T12:00:00');
+  }
+  if($('repFrom')) $('repFrom').value=ymd(from);
+  if($('repTo'))   $('repTo').value=ymd(to);
+}
+
+async function loadReportData(){
+  const btn=$('btnRepLoad');
+  reportMeta.from=$('repFrom')?.value||'';
+  reportMeta.to=$('repTo')?.value||'';
+  reportMeta.mode=$('repMode')?.value||'edited';
+  reportMeta.groupBy=$('repGroupBy')?.value||'unit';
+  reportMeta.onlyChanged=$('repOnlyChanged')?.checked||false;
+  if(!reportMeta.from || !reportMeta.to){ toast('กรุณาเลือกช่วงเวลา'); return; }
+  if(reportMeta.from>reportMeta.to){ toast('วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด'); return; }
+  if(!gsUrlBase()){ $('repStatus').textContent='✗ ยังไม่ได้เชื่อมต่อ Google Apps Script'; return; }
+  $('repStatus').textContent='กำลังดึงข้อมูล...'; if(btn) btn.disabled=true;
+  try{
+    const data=await jsonpGet('getAll');
+    if(!data || !data.ok) throw new Error(data?.error||'Google ไม่ตอบกลับ');
+    const gEmps=(data.employees||[]).map(mapGoogleEmployee).filter(e=>e.id||e.name);
+    const empList=gEmps.length?gEmps:EMPLOYEES;
+    const allowed=getAllowedEmployeeNames(); // ขอบเขตสิทธิ์ admin
+    const fromT=parseInputDate(reportMeta.from,0,0,0);
+    const toT=parseInputDate(reportMeta.to,23,59,59);
+    const rows=[];
+    (data.attendance||[]).forEach(r=>{
+      const emp=empList.find(e=>String(e.id)===String(r.EmpID||r.empId||'') || e.name===String(r.Name||r.name||''));
+      if(!emp) return;
+      if(!isSystemAdmin() && !allowed.has(emp.name)) return; // unit admin เห็นเฉพาะฝ่ายตน
+      let labelStr='';
+      const keyStr=String(r.Key||r.key||'');
+      if(keyStr.indexOf('|')>=0) labelStr=keyStr.slice(keyStr.lastIndexOf('|')+1).trim();
+      if(!labelStr) labelStr=String(r.DateLabel||r.dateLabel||r.Date||r.date||'').trim();
+      const pd=parseGoogleDate(labelStr,labelStr);
+      const status=String(r.Status||r.status||'').trim();
+      const utRaw=r.UpdateTime||r.updateTime||r.UpdatedAt||r.updatedAt||'';
+      const ut=utRaw?new Date(utRaw):null;
+      const utValid=ut && !isNaN(ut);
+      if(reportMeta.mode==='edited'){
+        if(!utValid) return;
+        if(ut<fromT || ut>toT) return;
+      } else {
+        if(!pd) return;
+        if(pd<fromT || pd>toT) return;
+      }
+      if(reportMeta.onlyChanged && (status==='On' || status==='')) return;
+      rows.push({
+        group:reportGroupKey(emp), name:emp.name, id:emp.id||'',
+        division:emp.division||'', section:emp.section||'', dept:emp.dept||'',
+        date:pd?dateKey(pd):labelStr, dateObj:pd, status,
+        updatedBy:String(r.UpdateBy||r.updateBy||r.By||r.by||'').trim(),
+        updateTime:utValid?ut:null
+      });
+    });
+    rows.sort((a,b)=> a.group.localeCompare(b.group,'th') || String(a.date).localeCompare(String(b.date)) || a.name.localeCompare(b.name,'th'));
+    reportRows=rows; reportMeta.total=rows.length;
+    renderReportSummary();
+    $('repStatus').textContent=`พบ ${rows.length} รายการ`;
+    if($('repEmailCard')) $('repEmailCard').style.display = rows.length?'block':'none';
+  }catch(e){
+    $('repStatus').textContent='✗ ดึงข้อมูลไม่สำเร็จ: '+e.message;
+    if($('repResult')) $('repResult').innerHTML='';
+  }finally{ if(btn) btn.disabled=false; }
+}
+
+function renderReportSummary(){
+  const wrap=$('repResult'); if(!wrap) return;
+  if(!reportRows.length){
+    wrap.innerHTML='<div class="card"><div class="card-body" style="color:var(--g5);font-size:13px">ไม่พบรายการที่แก้ไขในช่วงเวลาที่เลือก ลองเปลี่ยนช่วงเวลา/เกณฑ์ หรือเอาเครื่องหมายถูก "แสดงเฉพาะที่ไม่ใช่ On" ออก</div></div>';
+    return;
+  }
+  const STATUS_ORDER=['On','Off','พร.','กิจ','ป่วย'];
+  const groups={}; reportRows.forEach(r=>{ (groups[r.group]=groups[r.group]||[]).push(r); });
+  const overall=statusCounts(reportRows);
+  let html='';
+  html+=`<div class="card" style="margin-bottom:14px"><div class="card-body" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+    <div style="font-size:13px;font-weight:700;color:var(--g8)">รวมทั้งหมด ${reportRows.length} รายการ · ${Object.keys(groups).length} กลุ่ม</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${STATUS_ORDER.filter(s=>overall[s]).map(s=>`<span class="legend-pill ${STATE_CSS[s]}" style="padding:3px 10px">${s} ${overall[s]}</span>`).join('')}</div>
+    <div style="margin-left:auto;font-size:12px;color:var(--g5)">ช่วง ${fmtThai(reportMeta.from)} – ${fmtThai(reportMeta.to)} · ${reportMeta.mode==='edited'?'ตามเวลาที่แก้ไข':'ตามวันที่สถานะ'}</div>
+  </div></div>`;
+  Object.keys(groups).sort((a,b)=>a.localeCompare(b,'th')).forEach(g=>{
+    const list=groups[g]; const c=statusCounts(list); const showBy=anyBy(list);
+    html+=`<div class="card" style="margin-bottom:14px"><div class="card-hdr">
+      <div class="card-title">🗂 ${escHtml(g)} <span style="font-weight:400;color:var(--g5);font-size:12px">(${list.length} รายการ)</span></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${STATUS_ORDER.filter(s=>c[s]).map(s=>`<span class="legend-pill ${STATE_CSS[s]}" style="padding:2px 9px">${s} ${c[s]}</span>`).join('')}</div>
+    </div><div class="card-body" style="padding:0"><div class="matrix-wrap"><table class="matrix" style="font-size:12px;width:100%"><thead><tr>
+      <th style="text-align:left">พนักงาน</th><th>รหัส</th><th style="text-align:left">ส่วน / แผนก</th><th>วันที่</th><th>สถานะ</th><th>เวลาที่แก้ไข</th>${showBy?'<th>โดย</th>':''}
+    </tr></thead><tbody>`;
+    list.forEach(r=>{
+      html+=`<tr>
+        <td style="text-align:left">${escHtml(r.name)}</td>
+        <td style="text-align:center">${escHtml(r.id)}</td>
+        <td style="text-align:left;color:var(--g6)">${escHtml([r.division,r.section].filter(Boolean).join(' / '))}</td>
+        <td style="text-align:center;white-space:nowrap">${r.dateObj?thShort(r.dateObj):escHtml(r.date)}</td>
+        <td style="text-align:center"><span class="legend-pill ${STATE_CSS[r.status]||'p-blank'}">${escHtml(r.status||'-')}</span></td>
+        <td style="text-align:center;white-space:nowrap;color:var(--g6)">${r.updateTime?fmtDateTime(r.updateTime):'-'}</td>
+        ${showBy?`<td style="text-align:center;color:var(--g6)">${escHtml(r.updatedBy||'-')}</td>`:''}
+      </tr>`;
+    });
+    html+=`</tbody></table></div></div></div>`;
+  });
+  wrap.innerHTML=html;
+}
+
+function buildReportText(){
+  if(!reportRows.length) return '';
+  const STATUS_ORDER=['On','Off','พร.','กิจ','ป่วย'];
+  const groups={}; reportRows.forEach(r=>{ (groups[r.group]=groups[r.group]||[]).push(r); });
+  const overall=statusCounts(reportRows);
+  const lines=[];
+  lines.push('สรุปรายการที่แก้ไข — TBS 2026');
+  lines.push(`ช่วงเวลา: ${fmtThai(reportMeta.from)} – ${fmtThai(reportMeta.to)} (${reportMeta.mode==='edited'?'ตามเวลาที่แก้ไข':'ตามวันที่สถานะ'})`);
+  lines.push(`รวมทั้งหมด: ${reportRows.length} รายการ · ${Object.keys(groups).length} กลุ่ม`);
+  lines.push('สรุปสถานะ: '+STATUS_ORDER.filter(s=>overall[s]).map(s=>`${s}=${overall[s]}`).join('  '));
+  lines.push('');
+  Object.keys(groups).sort((a,b)=>a.localeCompare(b,'th')).forEach(g=>{
+    const list=groups[g]; const c=statusCounts(list);
+    lines.push(`■ ${g} (${list.length} รายการ) — ${STATUS_ORDER.filter(s=>c[s]).map(s=>`${s}:${c[s]}`).join('  ')}`);
+    list.forEach(r=>{
+      const dt=r.dateObj?thShort(r.dateObj):r.date;
+      const ut=r.updateTime?fmtDateTime(r.updateTime):'-';
+      lines.push(`   • ${r.name} (${r.id||'-'}) | ${[r.division,r.section].filter(Boolean).join('/')||'-'} | ${dt} | ${r.status||'-'} | แก้ไข ${ut}${r.updatedBy?(' | โดย '+r.updatedBy):''}`);
+    });
+    lines.push('');
+  });
+  lines.push('— ส่งจากระบบ TBS 2026 —');
+  return lines.join('\n');
+}
+
+function copyReportSummary(){
+  const txt=buildReportText();
+  if(!txt){ toast('ยังไม่มีข้อมูลสรุป — กด "ดึงข้อมูลสรุป" ก่อน'); return; }
+  if(navigator.clipboard?.writeText){
+    navigator.clipboard.writeText(txt).then(()=>toast('คัดลอกสรุปแล้ว ✓'),()=>fallbackCopyText(txt));
+  } else { fallbackCopyText(txt); }
+}
+function fallbackCopyText(txt){
+  const ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); toast('คัดลอกสรุปแล้ว ✓'); }catch(e){ toast('คัดลอกไม่สำเร็จ'); }
+  ta.remove();
+}
+
+async function sendReportEmail(){
+  if(!reportRows.length){ showRepEmail('✗ ยังไม่มีข้อมูลสรุป — กด "ดึงข้อมูลสรุป" ก่อน','var(--amber-m)'); return; }
+  const to=($('repEmailTo')?.value||'').trim();
+  const cc=($('repEmailCc')?.value||'').trim();
+  const subjBase=($('repEmailSubject')?.value||'').trim()||'[TBS 2026] สรุปรายการที่แก้ไข';
+  const url=gsUrlBase();
+  if(!url){ showRepEmail('✗ ยังไม่ได้ตั้งค่า Google Apps Script URL','var(--red-m)'); return; }
+  if(!to){ showRepEmail('✗ กรุณากรอกอีเมลปลายทาง (To)','var(--amber-m)'); return; }
+  const subject=`${subjBase} (${fmtThai(reportMeta.from)}–${fmtThai(reportMeta.to)})`;
+  showRepEmail('กำลังส่ง...','var(--g5)');
+  const payload={ action:'notify', lineEnabled:false, emailEnabled:true, emailTo:to, emailCc:cc, emailSubject:subject, emailBody:buildReportText() };
+  try{
+    await fetch(url,{method:'POST',body:JSON.stringify(payload),mode:'no-cors'});
+    showRepEmail('✓ ส่งอีเมลแล้ว → '+to,'#064E3B');
+    toast('📨 ส่งสรุปทางอีเมลแล้ว');
+  }catch(e){ showRepEmail('✗ ส่งไม่สำเร็จ: '+e.message,'var(--red-m)'); }
+}
+function showRepEmail(msg,color){ const el=$('repEmailResult'); if(el){ el.textContent=msg; el.style.color=color||'var(--g5)'; } }
+
+// ════════════════════════════════════════════════════════════
 //  NOTIFICATION SYSTEM — LINE Notify + Email via Apps Script
 // ════════════════════════════════════════════════════════════
 const NOTIFY_KEY = 'tbs_notify_config_v1';
@@ -3901,6 +4190,10 @@ window.findEmployee = typeof findEmployee !== "undefined" ? findEmployee : funct
 window.onESSCodeInput = typeof onESSCodeInput !== "undefined" ? onESSCodeInput : function(){};
 window.saveESSData = typeof saveESSData !== "undefined" ? saveESSData : function(){};
 window.switchAdminTab = typeof switchAdminTab !== "undefined" ? switchAdminTab : function(){};
+window.setReportPreset = typeof setReportPreset !== "undefined" ? setReportPreset : function(){};
+window.loadReportData = typeof loadReportData !== "undefined" ? loadReportData : function(){};
+window.copyReportSummary = typeof copyReportSummary !== "undefined" ? copyReportSummary : function(){};
+window.sendReportEmail = typeof sendReportEmail !== "undefined" ? sendReportEmail : function(){};
 window.renderOverview = typeof renderOverview !== "undefined" ? renderOverview : function(){};
 window.setOvPeriod = typeof setOvPeriod !== "undefined" ? setOvPeriod : function(){};
 window.initOverview = typeof initOverview !== "undefined" ? initOverview : function(){};
