@@ -2831,7 +2831,7 @@ async function saveAndReload(){
     tasks.push(
       fetch(gsConfig.url,{method:'POST',body:JSON.stringify({
         action:'updateCell',empId:emp.id||'',memberName:name,dateLabel:dk,
-        newState:status,silent:true,updateBy:AUTH?.isAdmin?'Admin':'Employee'
+        newState:status,silent:true,updateBy:AUTH?.isAdmin?(AUTH.name||'Admin'):'Employee'
       }),mode:'no-cors'}).catch(()=>{})
     );
   });
@@ -3210,7 +3210,7 @@ async function forceSyncAll(){
 async function syncCell({name,label,ri,di,state,totalW,totalM,silent}){
   setSyncStatus('↑','loading');
   try{
-    await fetch(gsConfig.url,{method:'POST',body:JSON.stringify({action:'updateCell',empId:empByName(name).id||'',memberName:name,dateLabel:label,colIndex:di,rowIndex:ri,newState:state,totalMembers:totalM,silent:silent||false,updateBy:AUTH.isAdmin?'Admin':'Employee'}),mode:'no-cors'});
+    await fetch(gsConfig.url,{method:'POST',body:JSON.stringify({action:'updateCell',empId:empByName(name).id||'',memberName:name,dateLabel:label,colIndex:di,rowIndex:ri,newState:state,totalMembers:totalM,silent:silent||false,updateBy:AUTH.isAdmin?(AUTH.name||'Admin'):'Employee'}),mode:'no-cors'});
     setSyncStatus('✓','ok');addSyncLog(`${name} ${label} → ${state}`,'ok');
     setTimeout(()=>setSyncStatus('','idle'),2000);
   }catch(e){setSyncStatus('✗','idle');addSyncLog(`Sync cell ล้มเหลว`,'err');}
