@@ -781,7 +781,10 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
       <div class="card-body">
         <div class="form-grid">
           <div class="field"><label>HR&GA Admin</label><input type="text" id="pinHR" placeholder="กรอกรหัสใหม่ (ไม่แสดงค่าเดิม)"></div>
-          <div class="field"><label>Operation Admin</label><input type="text" id="pinOPS" placeholder="กรอกรหัสใหม่ (ไม่แสดงค่าเดิม)"></div>
+          <div class="field"><label>Operation Admin (ดูทั้งฝ่าย)</label><input type="text" id="pinOPS" placeholder="กรอกรหัสใหม่ (ไม่แสดงค่าเดิม)"></div>
+          <div class="field"><label>Operation – YARD (เฉพาะแผนก)</label><input type="text" id="pinOPS_YARD" placeholder="กรอกรหัสใหม่ (ไม่แสดงค่าเดิม)"></div>
+          <div class="field"><label>Operation – PDI (เฉพาะแผนก)</label><input type="text" id="pinOPS_PDI" placeholder="กรอกรหัสใหม่ (ไม่แสดงค่าเดิม)"></div>
+          <div class="field"><label>Operation – Accessories (เฉพาะแผนก)</label><input type="text" id="pinOPS_ACCS" placeholder="กรอกรหัสใหม่ (ไม่แสดงค่าเดิม)"></div>
           <div class="field"><label>บัญชีและการเงิน Admin</label><input type="text" id="pinACC" placeholder="กรอกรหัสใหม่ (ไม่แสดงค่าเดิม)"></div>
           <div class="field"><label>System Admin</label><input type="text" id="pinADM" placeholder="กรอกรหัส System Admin ใหม่"></div>
         </div>
@@ -1125,8 +1128,19 @@ const GRP_CSS={'SML':'b-sml','KTG':'b-ktg','CNK':'b-cnk','STC':'b-stc'};
 const UNIT_SECTIONS={
   'HR': ['ทรัพยากรบุคคลและกิจการทั่วไป','HR&GA'],
   'OPS': ['PDI Operation','YARD Operation','Accessories Installation','PDI','Yard','Accessory','Pool'],
-  'ACC': ['บัญชีและการเงิน','Finance']
+  'ACC': ['บัญชีและการเงิน','Finance'],
+  // ── Admin ย่อยในฝ่าย Operation: แก้ได้เฉพาะแผนกของตัวเอง (OPS เดิมยังเห็นภาพรวมทั้งฝ่าย) ──
+  'OPS_YARD': ['YARD Operation','Yard'],
+  'OPS_PDI':  ['PDI Operation','PDI'],
+  'OPS_ACCS': ['Accessories Installation','Accessory']
 };
+// ป้ายชื่อหน่วยงาน (ใช้ร่วมกันทุกที่ แทนการ hardcode ซ้ำ)
+const UNIT_LABELS={ALL:'ทั้งหมด',HR:'HR&GA',OPS:'Operation',ACC:'บัญชีและการเงิน',ADM:'System Admin',
+  OPS_YARD:'Operation – YARD',OPS_PDI:'Operation – PDI',OPS_ACCS:'Operation – Accessories'};
+// ลำดับ unit สำหรับตั้ง/ตรวจรหัส (ADM ไว้ท้ายสุด) และตัวเลือกของ System Admin
+const ADMIN_UNITS=['HR','OPS','OPS_YARD','OPS_PDI','OPS_ACCS','ACC','ADM'];
+const ADMIN_PIN_DEFAULTS={HR:'HR2569',OPS:'OPS2569',ACC:'ACC2569',ADM:'',
+  OPS_YARD:'YARD2569',OPS_PDI:'PDI2569',OPS_ACCS:'ACCS2569'};
 
 // ════ RUNTIME STATE ════
 const SAVE_KEY='moo75_data_v1';
@@ -1376,7 +1390,7 @@ async function saveHolidaysToGoogle(){
 //  AUTH
 // ════════════════════════════════════════════════════════════
 function getPins(){try{return JSON.parse(localStorage.getItem(PIN_KEY)||'{}')}catch(e){return {}}}
-function getPin(unit){const def={HR:'HR2569',OPS:'OPS2569',ACC:'ACC2569',ADM:ADMIN_CODE};return getPins()[unit]||def[unit]||'';}
+function getPin(unit){return getPins()[unit]||ADMIN_PIN_DEFAULTS[unit]||(unit==='ADM'?ADMIN_CODE:'')||'';}
 async function validatePinWithGoogle(code){
   if(!gsConfig.url) return null;
   try{
@@ -1391,14 +1405,14 @@ async function validatePinWithGoogle(code){
 }
 async function savePins(){
   const pins={};
-  ['HR','OPS','ACC','ADM'].forEach(u=>{const inp=$('pin'+u);if(inp&&inp.value.trim())pins[u]=inp.value.trim();});
+  ADMIN_UNITS.forEach(u=>{const inp=$('pin'+u);if(inp&&inp.value.trim())pins[u]=inp.value.trim();});
   if(!Object.keys(pins).length){toast('กรุณากรอกรหัสที่ต้องการบันทึก');return;}
   // PIN บันทึก Google Sheet เท่านั้น
   if(gsConfig.url){
     try{
       await fetch(gsConfig.url,{method:'POST',body:JSON.stringify({action:'saveAdminPins',pins,updateBy:AUTH?.name||'System Admin'}),mode:'no-cors'});
       toast('บันทึกรหัสใน Google Sheet แล้ว ✓');
-      ['HR','OPS','ACC','ADM'].forEach(u=>{const inp=$('pin'+u);if(inp)inp.value='';});
+      ADMIN_UNITS.forEach(u=>{const inp=$('pin'+u);if(inp)inp.value='';});
       return;
     }catch(e){toast('บันทึก Google ไม่สำเร็จ ใช้ค่าในเครื่องแทน');}
   }
@@ -1416,10 +1430,10 @@ async function doAdminLogin(){
     matched=online.unit;
     matchedName=online.name;
   }else{
-    for(const unit of['HR','OPS','ACC','ADM']){
+    for(const unit of ADMIN_UNITS){
       if(code===getPin(unit)){matched=unit;break;}
     }
-    matchedName={HR:'HR&GA',OPS:'Operation',ACC:'บัญชีและการเงิน',ADM:'System Admin'}[matched]||'';
+    matchedName=UNIT_LABELS[matched]||'';
   }
   if(!matched){
     $('adminLoginErr').textContent='รหัสไม่ถูกต้อง';
@@ -2229,7 +2243,7 @@ function renderBulkBar(rangeDays,members){
 //  ADMIN SELECTION WORKFLOW
 // ════════════════════════════════════════════════════════════
 function unitLabel(unit){
-  return {ALL:'ทั้งหมด',HR:'HR&GA',OPS:'Operation',ACC:'บัญชีและการเงิน'}[unit] || unit;
+  return UNIT_LABELS[unit] || unit;
 }
 function getEmployeesByUnit(unit){
   if(unit==='ALL') return getAllowedEmployees();
@@ -2299,7 +2313,7 @@ function buildAdminSelectionPanel(){
   const selectedInScope=allMembers.filter(m=>selectedEmp.has(m.name)).length;
   const workdays=days.filter(d=>!isOff(d)).length;
   const unitOptions=isSystemAdmin()
-    ? ['ALL','HR','OPS','ACC'].map(u=>`<option value="${u}" ${adminSelectUnit===u?'selected':''}>${unitLabel(u)}</option>`).join('')
+    ? ['ALL','HR','OPS','OPS_YARD','OPS_PDI','OPS_ACCS','ACC'].map(u=>`<option value="${u}" ${adminSelectUnit===u?'selected':''}>${unitLabel(u)}</option>`).join('')
     : `<option value="${AUTH.unit}" selected>${unitLabel(AUTH.unit)}</option>`;
   const fOpts=getSelectFilterOptions();
   const optHtml=(list,cur)=>'<option value="ALL">ทั้งหมด</option>'+list.map(v=>`<option value="${v}" ${cur===v?'selected':''}>${v}</option>`).join('');
@@ -2398,7 +2412,7 @@ function clearFilteredEmployees(){
 function buildUnitPanel(unit){
   if(!isSystemAdmin() && unit!==AUTH.unit){ toast('คุณเข้าถึงได้เฉพาะฝ่ายของคุณเท่านั้น'); unit=AUTH.unit; }
   const sects=UNIT_SECTIONS[unit]||[];
-  const unitName={HR:'HR&GA',OPS:'Operation',ACC:'บัญชีและการเงิน'}[unit]||unit;
+  const unitName=unitLabel(unit);
   const members=EMPLOYEES.filter(e=>sects.includes(e.section||''));
   const inTable=members.filter(m=>selectedEmp.has(m.name));
   const wrap=$('unitContent');if(!wrap)return;
