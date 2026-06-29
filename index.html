@@ -1054,11 +1054,15 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
           <div class="field"><label>สำเนา (CC)</label><input id="repEmailCc" type="text" placeholder="exec@sml.co.th"></div>
           <div class="field" style="grid-column:1/-1"><label>หัวข้อ Email</label><input id="repEmailSubject" type="text" value="[TBS 2026] สรุปรายการที่แก้ไข"></div>
         </div>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--g7);margin-bottom:12px">
+          <input type="checkbox" id="repAttachXlsx" checked> แนบไฟล์ Excel ตารางการแก้ไข (ไฮไลต์ช่องที่แก้ + คอลัมน์หมายเหตุ)
+        </label>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <button class="btn btn-primary" onclick="sendReportEmail()">📨 ส่งสรุปทางอีเมล</button>
+          <button class="btn btn-ghost btn-sm" onclick="downloadReportExcel()">⬇ ดาวน์โหลด Excel (พรีวิว)</button>
           <span id="repEmailResult" style="font-size:12px;min-height:16px"></span>
         </div>
-        <div style="font-size:11px;color:var(--g5);margin-top:8px">ส่งผ่าน Google Apps Script เดียวกับระบบแจ้งเตือน — ตั้งค่า URL ได้ที่แท็บ System Admin</div>
+        <div style="font-size:11px;color:var(--g5);margin-top:8px">ส่งผ่าน Google Apps Script เดียวกับระบบแจ้งเตือน — ตั้งค่า URL ได้ที่แท็บ System Admin · ไฟล์ Excel สร้างจากเบราว์เซอร์แล้วแนบไปกับเมล</div>
       </div>
     </div>
   </div>
@@ -3493,6 +3497,9 @@ function exportExcel(){
 // ════════════════════════════════════════════════════════════
 let reportRows = [];
 let reportMeta = {from:'',to:'',mode:'edited',groupBy:'unit',onlyChanged:true,total:0};
+let reportAllAttend = {}; // name -> { dateISO -> status } (ค่าล่าสุดตาม UpdateTime) สำหรับสร้างตาราง Excel
+let reportEmpMap = {};    // name -> employee object (ใช้เติมคอลัมน์ซ้าย)
+let reportModSet = {};    // `${name}\n${dateISO}` -> {status, updateTime, updatedBy} เฉพาะช่องที่ถูกแก้ในช่วงเวลา
 
 function escHtml(s){ return String(s==null?'':s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
 function ymd(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
@@ -3560,6 +3567,8 @@ async function loadReportData(){
     const fromT=parseInputDate(reportMeta.from,0,0,0);
     const toT=parseInputDate(reportMeta.to,23,59,59);
     const rows=[];
+    const allAttend={}; const empMap={}; const modSet={};
+    const bestTime={}; // `${name}\n${dk}` -> time ของค่าที่เก็บไว้ใน allAttend (กันแถวเก่าทับใหม่)
     (data.attendance||[]).forEach(r=>{
       const emp=empList.find(e=>String(e.id)===String(r.EmpID||r.empId||'') || e.name===String(r.Name||r.name||''));
       if(!emp) return;
@@ -3573,6 +3582,13 @@ async function loadReportData(){
       const utRaw=r.UpdateTime||r.updateTime||r.UpdatedAt||r.updatedAt||'';
       const ut=utRaw?new Date(utRaw):null;
       const utValid=ut && !isNaN(ut);
+      // เก็บสถานะ "ปัจจุบัน" ทุกช่อง (ค่าล่าสุดตาม UpdateTime) เพื่อวาดตารางเต็มใน Excel
+      if(pd){
+        empMap[emp.name]=emp;
+        const dk=dateKey(pd); const gk=emp.name+'\n'+dk; const t=utValid?ut.getTime():0;
+        if(!(gk in bestTime) || t>=bestTime[gk]){ bestTime[gk]=t; (allAttend[emp.name]=allAttend[emp.name]||{})[dk]=status; }
+      }
+      // กรองช่วงเวลา (โหมด edited = ตาม UpdateTime, date = ตามวันที่สถานะ)
       if(reportMeta.mode==='edited'){
         if(!utValid) return;
         if(ut<fromT || ut>toT) return;
@@ -3581,16 +3597,19 @@ async function loadReportData(){
         if(pd<fromT || pd>toT) return;
       }
       if(reportMeta.onlyChanged && (status==='On' || status==='')) return;
+      const dkIso=pd?dateKey(pd):labelStr;
       rows.push({
         group:reportGroupKey(emp), name:emp.name, id:emp.id||'',
         division:emp.division||'', section:emp.section||'', dept:emp.dept||'',
-        date:pd?dateKey(pd):labelStr, dateObj:pd, status,
+        date:dkIso, dateObj:pd, status,
         updatedBy:String(r.UpdateBy||r.updateBy||r.By||r.by||'').trim(),
         updateTime:utValid?ut:null
       });
+      if(pd){ modSet[emp.name+'\n'+dkIso]={status,updateTime:utValid?ut:null,updatedBy:String(r.UpdateBy||r.updateBy||r.By||r.by||'').trim()}; }
     });
     rows.sort((a,b)=> a.group.localeCompare(b.group,'th') || String(a.date).localeCompare(String(b.date)) || a.name.localeCompare(b.name,'th'));
     reportRows=rows; reportMeta.total=rows.length;
+    reportAllAttend=allAttend; reportEmpMap=empMap; reportModSet=modSet;
     renderReportSummary();
     $('repStatus').textContent=`พบ ${rows.length} รายการ`;
     if($('repEmailCard')) $('repEmailCard').style.display = rows.length?'block':'none';
@@ -3687,15 +3706,111 @@ async function sendReportEmail(){
   if(!url){ showRepEmail('✗ ยังไม่ได้ตั้งค่า Google Apps Script URL','var(--red-m)'); return; }
   if(!to){ showRepEmail('✗ กรุณากรอกอีเมลปลายทาง (To)','var(--amber-m)'); return; }
   const subject=`${subjBase} (${fmtThai(reportMeta.from)}–${fmtThai(reportMeta.to)})`;
-  showRepEmail('กำลังส่ง...','var(--g5)');
-  const payload={ action:'notify', lineEnabled:false, emailEnabled:true, emailTo:to, emailCc:cc, emailSubject:subject, emailBody:buildReportText() };
-  try{
-    await fetch(url,{method:'POST',body:JSON.stringify(payload),mode:'no-cors'});
-    showRepEmail('✓ ส่งอีเมลแล้ว → '+to,'#064E3B');
-    toast('📨 ส่งสรุปทางอีเมลแล้ว');
-  }catch(e){ showRepEmail('✗ ส่งไม่สำเร็จ: '+e.message,'var(--red-m)'); }
+  const wantXlsx=$('repAttachXlsx')?.checked!==false;
+  showRepEmail(wantXlsx?'กำลังสร้างไฟล์ Excel และส่ง...':'กำลังส่ง...','var(--g5)');
+  const send=(b64,fname)=>{
+    const payload={ action:'notify', lineEnabled:false, emailEnabled:true, emailTo:to, emailCc:cc, emailSubject:subject, emailBody:buildReportText() };
+    if(b64){ payload.attachXlsxBase64=b64; payload.attachXlsxName=fname; }
+    fetch(url,{method:'POST',body:JSON.stringify(payload),mode:'no-cors'})
+      .then(()=>{ showRepEmail('✓ ส่งอีเมลแล้ว → '+to+(b64?' (แนบ Excel)':''),'#064E3B'); toast('📨 ส่งสรุปทางอีเมลแล้ว'); })
+      .catch(e=>showRepEmail('✗ ส่งไม่สำเร็จ: '+e.message,'var(--red-m)'));
+  };
+  if(!wantXlsx){ send(null,null); return; }
+  ensureSheetJS(()=>{
+    try{
+      const wb=buildModifiedWorkbook();
+      const b64=window.XLSX.write(wb,{type:'base64',bookType:'xlsx'});
+      send(b64, reportXlsxName());
+    }catch(e){ showRepEmail('✗ สร้าง Excel ไม่สำเร็จ: '+e.message+' — ส่งแบบข้อความแทน','var(--amber-m)'); send(null,null); }
+  });
 }
 function showRepEmail(msg,color){ const el=$('repEmailResult'); if(el){ el.textContent=msg; el.style.color=color||'var(--g5)'; } }
+
+function reportXlsxName(){ return `TBS2026_การแก้ไข_${reportMeta.from}_ถึง_${reportMeta.to}.xlsx`; }
+
+function downloadReportExcel(){
+  if(!reportRows.length){ toast('ยังไม่มีข้อมูล — กด "ดึงข้อมูลสรุป" ก่อน'); return; }
+  ensureSheetJS(()=>{
+    try{ window.XLSX.writeFile(buildModifiedWorkbook(), reportXlsxName()); toast('ดาวน์โหลด Excel แล้ว ✓'); }
+    catch(e){ toast('สร้าง Excel ไม่สำเร็จ: '+e.message); }
+  });
+}
+
+// สร้าง workbook: ตารางพนักงาน × วันทำงาน (รูปแบบเดียวกับ Export เต็ม) แต่ไฮไลต์ช่องที่ถูกแก้ในช่วงเวลา + คอลัมน์หมายเหตุ
+function buildModifiedWorkbook(){
+  const XLSX=window.XLSX;
+  const wb=XLSX.utils.book_new();
+  const STATE_TH={'On':'On','Off':'Off','พร.':'ลา','กิจ':'ลา','ป่วย':'ลา','':'—'};
+  const FILL={on:{rgb:'DBEAFE'},off:{rgb:'FEE2E2'},pr:{rgb:'FEF3C7'},kit:{rgb:'D1FAE5'},sick:{rgb:'EDE9FE'},we:{rgb:'F3F4F6'},white:{rgb:'FFFFFF'},head:{rgb:'374151'},title:{rgb:'1B4F8A'},sum:{rgb:'1E3A5F'}};
+  const SFILL={'On':FILL.on,'Off':FILL.off,'พร.':FILL.pr,'กิจ':FILL.kit,'ป่วย':FILL.sick,'':FILL.we};
+  const SFONT={'On':{rgb:'1E3A8A'},'Off':{rgb:'7F1D1D'},'พร.':{rgb:'78350F'},'กิจ':{rgb:'064E3B'},'ป่วย':{rgb:'4C1D95'},'':{rgb:'9CA3AF'}};
+  const thin={style:'thin',color:{rgb:'9CA3AF'}};
+  const normalBorder={top:thin,bottom:thin,left:thin,right:thin};
+  // กรอบไฮไลต์สำหรับช่องที่ถูกแก้ — ส้มหนา เห็นชัดท่ามกลางสีสถานะ
+  const hl={style:'medium',color:{rgb:'EA580C'}};
+  const hlBorder={top:hl,bottom:hl,left:hl,right:hl};
+  const cell=(v,fillRgb,font,align,bdr)=>({v,t:typeof v==='number'?'n':'s',s:{
+    fill:{patternType:'solid',fgColor:fillRgb||FILL.white},
+    font:{name:'Sarabun',sz:10,...(font||{})},
+    alignment:{horizontal:align||'left',vertical:'center',wrapText:true},
+    border:bdr||normalBorder
+  }});
+
+  // วันทำงานในช่วงที่เลือก (เว้นเสาร์-อาทิตย์/วันหยุด)
+  const allDays=dateRange(parseInputDate(reportMeta.from,12), parseInputDate(reportMeta.to,12));
+  const workdays=allDays.filter(d=>!isOff(d));
+  // พนักงานที่มีการแก้ไขในช่วงนี้ (เรียงตามฝ่าย → ชื่อ)
+  const names=[...new Set(reportRows.map(r=>r.name))];
+  const members=names.map(n=>reportEmpMap[n]||{name:n}).sort((a,b)=>
+    reportGroupKey(a).localeCompare(reportGroupKey(b),'th') || String(a.name).localeCompare(String(b.name),'th'));
+
+  const ws={};
+  const FIXED=['ฝ่าย','ชื่อ-นามสกุล','รหัส','ส่วน','แผนก','ตำแหน่ง'];
+  const nFixed=FIXED.length;
+  const noteCol=nFixed+workdays.length; // คอลัมน์หมายเหตุด้านขวาสุด
+  const totalCols=noteCol+1;
+  // Row 0: title
+  ws['A1']={v:`สรุปรายการที่แก้ไข · ${fmtThai(reportMeta.from)} – ${fmtThai(reportMeta.to)} · ${reportMeta.mode==='edited'?'ตามเวลาที่แก้ไข':'ตามวันที่สถานะ'} · ช่องกรอบส้ม = ถูกแก้ในช่วงนี้`,
+    t:'s',s:{font:{name:'Sarabun',sz:12,bold:true,color:{rgb:'FFFFFF'}},fill:{patternType:'solid',fgColor:FILL.title},alignment:{horizontal:'left',vertical:'center'}}};
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:totalCols-1}}];
+  // Row 1: header
+  FIXED.forEach((h,ci)=>{ ws[XLSX.utils.encode_cell({r:1,c:ci})]=cell(h,FILL.head,{bold:true,color:{rgb:'FFFFFF'}},'center'); });
+  workdays.forEach((d,di)=>{
+    ws[XLSX.utils.encode_cell({r:1,c:nFixed+di})]=cell(`${d.getDate()}/${d.getMonth()+1}\n${TH_DAYS[d.getDay()]}`,FILL.head,{bold:true,color:{rgb:'FFFFFF'},sz:9},'center');
+  });
+  ws[XLSX.utils.encode_cell({r:1,c:noteCol})]=cell('หมายเหตุการแก้ไข (วันที่ → สถานะ · เวลาที่แก้)',FILL.sum,{bold:true,color:{rgb:'FFFFFF'}},'center');
+  // Data rows
+  members.forEach((m,ri)=>{
+    const r=ri+2;
+    const base=[reportGroupKey(m),m.name||'',m.id||'',m.division||'',m.section||'',m.role||''];
+    base.forEach((v,ci)=>{ ws[XLSX.utils.encode_cell({r,c:ci})]=cell(v,FILL.white,{sz:10},'left'); });
+    const notes=[];
+    workdays.forEach((d,di)=>{
+      const dk=dateKey(d);
+      const s=(reportAllAttend[m.name]&&reportAllAttend[m.name][dk]!==undefined)?reportAllAttend[m.name][dk]:'';
+      const mod=reportModSet[m.name+'\n'+dk];
+      const addr=XLSX.utils.encode_cell({r,c:nFixed+di});
+      ws[addr]=cell(STATE_TH[s]||s||'—', SFILL[s]||FILL.we, {color:SFONT[s]||SFONT[''],sz:9,bold:!!mod}, 'center', mod?hlBorder:normalBorder);
+      if(mod){ notes.push(`${d.getDate()}/${d.getMonth()+1}→${s||'—'}${mod.updateTime?(' ('+fmtDateTime(mod.updateTime)+')'):''}`); }
+    });
+    ws[XLSX.utils.encode_cell({r,c:noteCol})]=cell(notes.join('  ·  '),{rgb:'FFF7ED'},{sz:9,color:{rgb:'7C2D12'}},'left');
+  });
+  const lastR=members.length+1;
+  ws['!ref']=XLSX.utils.encode_range({r:0,c:0},{r:lastR,c:totalCols-1});
+  ws['!autofilter']={ref:XLSX.utils.encode_range({r:1,c:0},{r:lastR,c:totalCols-1})};
+  ws['!cols']=[{wch:16},{wch:20},{wch:9},{wch:16},{wch:14},{wch:18},...workdays.map(()=>({wch:7})),{wch:48}];
+  ws['!rows']=[{hpt:22},{hpt:30},...Array(members.length).fill({hpt:20})];
+  XLSX.utils.book_append_sheet(wb,ws,'ตารางการแก้ไข');
+
+  // Sheet 2: รายการแก้ไข (list) — เผื่อพิมพ์/กรอง
+  const aoa=[['ฝ่าย','พนักงาน','รหัส','ส่วน','แผนก','วันที่','สถานะ','เวลาที่แก้ไข','โดย']];
+  reportRows.forEach(r=>aoa.push([r.group,r.name,r.id,r.division,r.section,
+    r.dateObj?thShort(r.dateObj):r.date, r.status, r.updateTime?fmtDateTime(r.updateTime):'', r.updatedBy||'']));
+  const ws2=XLSX.utils.aoa_to_sheet(aoa);
+  ws2['!cols']=[{wch:16},{wch:20},{wch:9},{wch:16},{wch:14},{wch:11},{wch:8},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws2,'รายการแก้ไข');
+  return wb;
+}
 
 // ════════════════════════════════════════════════════════════
 //  NOTIFICATION SYSTEM — LINE Notify + Email via Apps Script
@@ -4208,6 +4323,7 @@ window.setReportPreset = typeof setReportPreset !== "undefined" ? setReportPrese
 window.loadReportData = typeof loadReportData !== "undefined" ? loadReportData : function(){};
 window.copyReportSummary = typeof copyReportSummary !== "undefined" ? copyReportSummary : function(){};
 window.sendReportEmail = typeof sendReportEmail !== "undefined" ? sendReportEmail : function(){};
+window.downloadReportExcel = typeof downloadReportExcel !== "undefined" ? downloadReportExcel : function(){};
 window.renderOverview = typeof renderOverview !== "undefined" ? renderOverview : function(){};
 window.setOvPeriod = typeof setOvPeriod !== "undefined" ? setOvPeriod : function(){};
 window.initOverview = typeof initOverview !== "undefined" ? initOverview : function(){};
