@@ -3683,6 +3683,31 @@ function buildReportText(){
   return lines.join('\n');
 }
 
+// เนื้อเมล: สรุปสั้นๆ ระดับกลุ่ม ไม่ลงรายละเอียดรายคน-รายวัน แล้วชี้ให้ไปดูไฟล์แนบ
+function buildReportEmailBody(hasAttachment){
+  if(!reportRows.length) return '';
+  const STATUS_ORDER=['On','Off','พร.','กิจ','ป่วย'];
+  const groups={}; reportRows.forEach(r=>{ (groups[r.group]=groups[r.group]||[]).push(r); });
+  const overall=statusCounts(reportRows);
+  const lines=[];
+  lines.push('สรุปรายการที่แก้ไข — TBS 2026');
+  lines.push(`ช่วงเวลา: ${fmtThai(reportMeta.from)} – ${fmtThai(reportMeta.to)} (${reportMeta.mode==='edited'?'ตามเวลาที่แก้ไข':'ตามวันที่สถานะ'})`);
+  lines.push(`รวมทั้งหมด: ${reportRows.length} รายการ · ${Object.keys(groups).length} กลุ่ม`);
+  lines.push('สรุปสถานะ: '+STATUS_ORDER.filter(s=>overall[s]).map(s=>`${s}=${overall[s]}`).join('  '));
+  lines.push('');
+  lines.push('สรุปแยกตามกลุ่ม:');
+  Object.keys(groups).sort((a,b)=>a.localeCompare(b,'th')).forEach(g=>{
+    const list=groups[g]; const c=statusCounts(list);
+    lines.push(`■ ${g} — ${list.length} รายการ (${STATUS_ORDER.filter(s=>c[s]).map(s=>`${s}:${c[s]}`).join('  ')})`);
+  });
+  lines.push('');
+  lines.push(hasAttachment
+    ? '📎 รายละเอียดรายคน/รายวัน พร้อมไฮไลต์ช่องที่แก้ไข ดูได้ใน "ไฟล์ Excel" ที่แนบมากับอีเมลนี้'
+    : 'ℹ️ ดูรายละเอียดรายคน/รายวันได้ในระบบ TBS 2026 หน้า "สรุปการแก้ไข"');
+  lines.push('— ส่งจากระบบ TBS 2026 —');
+  return lines.join('\n');
+}
+
 function copyReportSummary(){
   const txt=buildReportText();
   if(!txt){ toast('ยังไม่มีข้อมูลสรุป — กด "ดึงข้อมูลสรุป" ก่อน'); return; }
@@ -3709,7 +3734,7 @@ async function sendReportEmail(){
   const wantXlsx=$('repAttachXlsx')?.checked!==false;
   showRepEmail(wantXlsx?'กำลังสร้างไฟล์ Excel และส่ง...':'กำลังส่ง...','var(--g5)');
   const send=(b64,fname)=>{
-    const payload={ action:'notify', lineEnabled:false, emailEnabled:true, emailTo:to, emailCc:cc, emailSubject:subject, emailBody:buildReportText() };
+    const payload={ action:'notify', lineEnabled:false, emailEnabled:true, emailTo:to, emailCc:cc, emailSubject:subject, emailBody:buildReportEmailBody(!!b64) };
     if(b64){ payload.attachXlsxBase64=b64; payload.attachXlsxName=fname; }
     fetch(url,{method:'POST',body:JSON.stringify(payload),mode:'no-cors'})
       .then(()=>{ showRepEmail('✓ ส่งอีเมลแล้ว → '+to+(b64?' (แนบ Excel)':''),'#064E3B'); toast('📨 ส่งสรุปทางอีเมลแล้ว'); })
