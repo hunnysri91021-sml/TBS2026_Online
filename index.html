@@ -1253,9 +1253,11 @@ function loadPendingEdits(){
     if(Array.isArray(raw)) pendingEdits=raw.filter(x=>x&&x.name&&x.dk!==undefined);
   }catch(e){ pendingEdits=[]; }
 }
-function markDirty(name,dk,status){
+function markDirty(name,dk,status,oldStatus){
+  // เก็บ old ไว้เฉพาะตอนสร้างรายการใหม่ (แก้ครั้งแรกของช่องนี้ในรอบที่ยังไม่ยืนยัน)
+  // เพื่อใช้เทียบ เดิม/ใหม่ ตอนสรุปแจ้งเตือน ถึงจะวนคลิกเปลี่ยนหลายรอบ ค่า old ก็ยังอ้างอิงจากค่าที่ยืนยันล่าสุดเสมอ
   const e=pendingEdits.find(x=>x.name===name&&x.dk===dk);
-  if(e) e.status=status; else pendingEdits.push({name,dk,status});
+  if(e) e.status=status; else pendingEdits.push({name,dk,status,old:oldStatus??''});
   savePendingEdits();
 }
 function reconcilePending(){
@@ -1811,29 +1813,42 @@ function buildSaveNotifyMsg(emp){
 }
 
 // สรุปแจ้งเตือน 1 ครั้งตอน Admin กด Save จริง (ไม่ใช่ทุกครั้งที่คลิกวนสถานะ/bulk ระหว่างแก้)
-function buildAdminSaveNotifyMsg(names){
+// entries: [{name,dk,status,old}] จาก pendingEdits ตอนกด Save — ใช้บอกว่าวันไหนเปลี่ยนจากอะไรเป็นอะไร
+function dkToShortThai(dk){
+  const d=new Date(String(dk).slice(0,10)+'T12:00:00');
+  return isNaN(d)?dk:`${d.getDate()} ${TH_MONTHS[d.getMonth()]}`;
+}
+function buildAdminSaveNotifyMsg(entries){
   const workdays=days.filter(d=>!isOff(d));
   const now=new Date();
-  const lines=names.map(name=>{
+  const byName={};
+  entries.forEach(e=>{ (byName[e.name]=byName[e.name]||[]).push(e); });
+  const names=Object.keys(byName);
+  const blocks=names.map(name=>{
     const emp=empByName(name);
     const on=workdays.filter(d=>attendData[name]?.[dateKey(d)]==='On').length;
     const off=workdays.filter(d=>attendData[name]?.[dateKey(d)]==='Off').length;
     const la=workdays.filter(d=>['พร.','กิจ','ป่วย'].includes(attendData[name]?.[dateKey(d)])).length;
-    return `• ${name} (${emp.id||''}) — On ${on} / Off ${off} / ลา ${la}`;
+    const changeLines=byName[name]
+      .sort((a,b)=>a.dk.localeCompare(b.dk))
+      .map(e=>`   - ${dkToShortThai(e.dk)}: ${e.old||'ว่าง'} → ${e.status||'ว่าง'}`)
+      .join('\n');
+    return `• ${name} (${emp.id||''}) — On ${on} / Off ${off} / ลา ${la}\n${changeLines}`;
   });
   return `[TBS 2026] 📋 Admin แก้ไขสถานะพนักงาน ${names.length} คน
 ──────────────────
-${lines.join('\n')}
+${blocks.join('\n\n')}
 ──────────────────
 แก้ไขโดย: ${AUTH?.name||'Admin'}
 บันทึกเมื่อ: ${now.getDate()} ${TH_MONTHS[now.getMonth()]} ${now.getFullYear()+543} ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')} น.`;
 }
-function sendAdminSaveNotify(names){
-  if(!names.length) return;
+function sendAdminSaveNotify(entries){
+  if(!entries.length) return;
   const cfg2=getNotifyConfig();
   const notifyUrl=cfg2.gsUrl||gsConfig.url||DEFAULT_GS_URL||'';
   if(!notifyUrl) return;
-  const sumMsg=buildAdminSaveNotifyMsg(names);
+  const names=[...new Set(entries.map(e=>e.name))];
+  const sumMsg=buildAdminSaveNotifyMsg(entries);
   fetch(notifyUrl,{method:'POST',body:JSON.stringify({
     action:'notify',
     lineEnabled:cfg2.lineEnabled,lineToId:cfg2.lineToId||'',lineMessage:sumMsg,
@@ -2223,7 +2238,7 @@ function toggleCellAdmin(name,dk,ri,di,totalW,totalM,hid,bid,rangeDays,members){
   const ns=STATES[(STATES.indexOf(cur)+1)%STATES.length];
   if(!attendData[name])attendData[name]={};
   attendData[name][dk]=ns;
-  markDirty(name,dk,ns);
+  markDirty(name,dk,ns,cur);
   buildMatrix(hid,bid,rangeDays,members,true);
   // บันทึกทีละช่อง (dk = ISO) แทนการ bulk overwrite ทั้งตาราง → ปลอดภัยเมื่อหลายคนแก้พร้อมกัน
   // silent:true — ระหว่างกำลังวนเปลี่ยนสถานะยังไม่แจ้งเตือนทุกคลิก จะสรุปแจ้งครั้งเดียวตอนกด Save
@@ -2246,8 +2261,9 @@ function showCtxMenu(e,name,dk,ri,di,totalW,totalM,hid,bid,rangeDays,members){
     item.appendChild(dot);item.appendChild(document.createTextNode(STATE_FULL[s]||s));
     if(s===cur){const ck=document.createElement('span');ck.style.cssText='margin-left:auto;color:var(--brand)';ck.textContent='✓';item.appendChild(ck);}
     item.onclick=()=>{
+      const old=attendData[name]?.[dk]??'';
       if(!attendData[name])attendData[name]={};attendData[name][dk]=s;
-      markDirty(name,dk,s);
+      markDirty(name,dk,s,old);
       buildMatrix(hid,bid,rangeDays,members,true);
       if(gsConfig.url&&gsConfig.initialized){syncCell({name,label:dk,ri,di,state:s,totalW,totalM,silent:true});}
       removeCtxMenu();
@@ -2257,7 +2273,7 @@ function showCtxMenu(e,name,dk,ri,di,totalW,totalM,hid,bid,rangeDays,members){
   const div=document.createElement('div');div.className='ctx-div';menu.appendChild(div);
   const fill=document.createElement('div');fill.className='ctx-item';fill.textContent='↔ เติมทั้งแถว';
   fill.onclick=()=>{
-    rangeDays.filter(d=>!isOff(d)).forEach(d=>{const k=dateKey(d);if(!attendData[name])attendData[name]={};attendData[name][k]=cur;markDirty(name,k,cur);if(gsConfig.url&&gsConfig.initialized)syncCell({name,label:k,ri,di,state:cur,totalW,totalM,silent:true});});
+    rangeDays.filter(d=>!isOff(d)).forEach(d=>{const k=dateKey(d);const old=attendData[name]?.[k]??'';if(!attendData[name])attendData[name]={};attendData[name][k]=cur;markDirty(name,k,cur,old);if(gsConfig.url&&gsConfig.initialized)syncCell({name,label:k,ri,di,state:cur,totalW,totalM,silent:true});});
     buildMatrix(hid,bid,rangeDays,members,true);removeCtxMenu();toast(`เติมทั้งแถว ${name} (อย่าลืมกด Save)`);
   };
   menu.appendChild(fill);
@@ -2279,7 +2295,7 @@ function renderBulkBar(rangeDays,members){
     const p=document.createElement('div');p.className='m-pill '+(STATE_CSS[s]||'p-blank');
     p.style.cssText='width:40px;height:32px;font-size:10px;cursor:pointer';p.textContent=s;
     p.onclick=()=>{
-      sel.forEach(n=>{rangeDays.filter(d=>!isOff(d)).forEach(d=>{const k=dateKey(d);if(!attendData[n])attendData[n]={};attendData[n][k]=s;markDirty(n,k,s);if(gsConfig.url&&gsConfig.initialized)syncCell({name:n,label:k,ri:0,di:0,state:s,totalW:0,totalM:0,silent:true});});});
+      sel.forEach(n=>{rangeDays.filter(d=>!isOff(d)).forEach(d=>{const k=dateKey(d);const old=attendData[n]?.[k]??'';if(!attendData[n])attendData[n]={};attendData[n][k]=s;markDirty(n,k,s,old);if(gsConfig.url&&gsConfig.initialized)syncCell({name:n,label:k,ri:0,di:0,state:s,totalW:0,totalM:0,silent:true});});});
       buildMatrix('editHead','editBody',rangeDays,members,true);toast(`ตั้ง ${sel.length} คน → ${STATE_FULL[s]} (อย่าลืมกด Save)`);
     };
     bar.appendChild(p);
@@ -2659,8 +2675,9 @@ function setStatusForNames(names,status){
     days.forEach(d=>{
       if(isOff(d)) return;
       const k=dateKey(d);
+      const old=attendData[name][k]??'';
       attendData[name][k]=status;
-      markDirty(name,k,status);
+      markDirty(name,k,status,old);
       if(gsConfig.url&&gsConfig.initialized) syncCell({name,label:k,ri:0,di:0,state:status,totalW:0,totalM:0,silent:true});
     });
   });
@@ -2900,9 +2917,9 @@ async function deleteManagedEmployee(){
 // ปลอดภัยเมื่อหลายคนแก้พร้อมกัน (ไม่เขียนทับช่องของคนอื่น) และยืนยันว่าบันทึกจริง
 async function saveAndReload(){
   if(!gsConfig.url){ toast('⚠️ ยังไม่ได้ตั้งค่า Google Sheet URL'); return; }
-  // เก็บรายชื่อคนที่แก้ไว้ก่อนส่งจริง ไว้ใช้สรุปแจ้งเตือนครั้งเดียวตอนกด Save
+  // เก็บช่องที่แก้ไว้ (พร้อมค่าเดิม/ใหม่) ก่อนส่งจริง ไว้ใช้สรุปแจ้งเตือนครั้งเดียวตอนกด Save
   // (ระหว่างวนคลิกเปลี่ยนสถานะ/bulk แต่ละครั้งจะ silent:true ไม่แจ้งเตือนทุกคลิกแล้ว)
-  const changedNames=[...new Set(pendingEdits.map(e=>e.name))];
+  const changedEntries=pendingEdits.map(e=>({...e}));
   setSyncStatus('↑ กำลังบันทึก...','loading');
   // ส่งทุกช่องที่ค้างอยู่ (เผื่อ sync ทีละช่องตอนกดยังไม่สำเร็จ เช่นช่วง Offline)
   const tasks=[];
@@ -2916,7 +2933,7 @@ async function saveAndReload(){
     );
   });
   await Promise.all(tasks);
-  sendAdminSaveNotify(changedNames);
+  sendAdminSaveNotify(changedEntries);
   setSyncStatus('↓ ดึงข้อมูลล่าสุด...','loading');
   await new Promise(r=>setTimeout(r,1200)); // รอ Google เขียนเสร็จ
   await loadFromGoogleDb(true);              // ดึงล่าสุด (ช่องที่ยังไม่ยืนยันถูกคงไว้ด้วย reconcilePending)
