@@ -2238,13 +2238,11 @@ function toggleCellAdmin(name,dk,ri,di,totalW,totalM,hid,bid,rangeDays,members){
   const ns=STATES[(STATES.indexOf(cur)+1)%STATES.length];
   if(!attendData[name])attendData[name]={};
   attendData[name][dk]=ns;
+  // แก้เฉพาะในเครื่องระหว่างวนคลิก ยังไม่ยิงขึ้น Google ทันที — ถ้ายิงทุกคลิกไปพร้อมกันหลายคำขอ
+  // Google Apps Script อาจประมวลผลไม่เรียงลำดับ ทำให้ค่าที่เขียนจริงไม่ใช่ค่าสุดท้ายที่คลิก (ดูเหมือนย้อนกลับ)
+  // จึงรวบยอดส่งเป็นค่าสุดท้ายทีละช่องตอนกด Save เท่านั้น (saveAndReload อ่านจาก pendingEdits)
   markDirty(name,dk,ns,cur);
   buildMatrix(hid,bid,rangeDays,members,true);
-  // บันทึกทีละช่อง (dk = ISO) แทนการ bulk overwrite ทั้งตาราง → ปลอดภัยเมื่อหลายคนแก้พร้อมกัน
-  // silent:true — ระหว่างกำลังวนเปลี่ยนสถานะยังไม่แจ้งเตือนทุกคลิก จะสรุปแจ้งครั้งเดียวตอนกด Save
-  if(gsConfig.url&&gsConfig.initialized){
-    syncCell({name,label:dk,ri,di,state:ns,totalW,totalM,silent:true});
-  }
 }
 
 // Context menu
@@ -2263,9 +2261,9 @@ function showCtxMenu(e,name,dk,ri,di,totalW,totalM,hid,bid,rangeDays,members){
     item.onclick=()=>{
       const old=attendData[name]?.[dk]??'';
       if(!attendData[name])attendData[name]={};attendData[name][dk]=s;
+      // ยิงขึ้น Google ตอนกด Save เท่านั้น (เหตุผลเดียวกับ toggleCellAdmin — กันเขียนสลับลำดับกัน)
       markDirty(name,dk,s,old);
       buildMatrix(hid,bid,rangeDays,members,true);
-      if(gsConfig.url&&gsConfig.initialized){syncCell({name,label:dk,ri,di,state:s,totalW,totalM,silent:true});}
       removeCtxMenu();
     };
     menu.appendChild(item);
@@ -2273,7 +2271,7 @@ function showCtxMenu(e,name,dk,ri,di,totalW,totalM,hid,bid,rangeDays,members){
   const div=document.createElement('div');div.className='ctx-div';menu.appendChild(div);
   const fill=document.createElement('div');fill.className='ctx-item';fill.textContent='↔ เติมทั้งแถว';
   fill.onclick=()=>{
-    rangeDays.filter(d=>!isOff(d)).forEach(d=>{const k=dateKey(d);const old=attendData[name]?.[k]??'';if(!attendData[name])attendData[name]={};attendData[name][k]=cur;markDirty(name,k,cur,old);if(gsConfig.url&&gsConfig.initialized)syncCell({name,label:k,ri,di,state:cur,totalW,totalM,silent:true});});
+    rangeDays.filter(d=>!isOff(d)).forEach(d=>{const k=dateKey(d);const old=attendData[name]?.[k]??'';if(!attendData[name])attendData[name]={};attendData[name][k]=cur;markDirty(name,k,cur,old);});
     buildMatrix(hid,bid,rangeDays,members,true);removeCtxMenu();toast(`เติมทั้งแถว ${name} (อย่าลืมกด Save)`);
   };
   menu.appendChild(fill);
@@ -2295,7 +2293,7 @@ function renderBulkBar(rangeDays,members){
     const p=document.createElement('div');p.className='m-pill '+(STATE_CSS[s]||'p-blank');
     p.style.cssText='width:40px;height:32px;font-size:10px;cursor:pointer';p.textContent=s;
     p.onclick=()=>{
-      sel.forEach(n=>{rangeDays.filter(d=>!isOff(d)).forEach(d=>{const k=dateKey(d);const old=attendData[n]?.[k]??'';if(!attendData[n])attendData[n]={};attendData[n][k]=s;markDirty(n,k,s,old);if(gsConfig.url&&gsConfig.initialized)syncCell({name:n,label:k,ri:0,di:0,state:s,totalW:0,totalM:0,silent:true});});});
+      sel.forEach(n=>{rangeDays.filter(d=>!isOff(d)).forEach(d=>{const k=dateKey(d);const old=attendData[n]?.[k]??'';if(!attendData[n])attendData[n]={};attendData[n][k]=s;markDirty(n,k,s,old);});});
       buildMatrix('editHead','editBody',rangeDays,members,true);toast(`ตั้ง ${sel.length} คน → ${STATE_FULL[s]} (อย่าลืมกด Save)`);
     };
     bar.appendChild(p);
@@ -2678,7 +2676,6 @@ function setStatusForNames(names,status){
       const old=attendData[name][k]??'';
       attendData[name][k]=status;
       markDirty(name,k,status,old);
-      if(gsConfig.url&&gsConfig.initialized) syncCell({name,label:k,ri:0,di:0,state:status,totalW:0,totalM:0,silent:true});
     });
   });
   refreshAdminViews();
