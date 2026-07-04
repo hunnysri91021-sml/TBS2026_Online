@@ -1758,34 +1758,37 @@ async function saveESSData(){
   const cfg2=getNotifyConfig();
   const notifyUrl=cfg2.gsUrl||gsConfig.url||DEFAULT_GS_URL||'';
   if(notifyUrl && currentESSEmp){
-    const sumMsg=buildSaveNotifyMsg(currentESSEmp);
-    const attendRows=days.filter(d=>!isOff(d)).map(d=>{
+    const emp=currentESSEmp;
+    const sumMsg=buildSaveNotifyMsg(emp);
+    // ช่องที่เปลี่ยนจริงในรอบนี้ (เทียบกับ snapshot ก่อนเริ่มแก้) — ใช้ไฮไลต์ในไฟล์ Excel
+    const modEntries=days.filter(d=>!isOff(d)).map(d=>{
       const k=dateKey(d);
-      const newSt=attendData[currentESSEmp.name]?.[k]||'';
+      const newSt=attendData[emp.name]?.[k]||'';
       const oldSt=essOrigAttend?.[k]||'';
-      return {
-        date:k,
-        dateLabel:`${d.getDate()} ${TH_MONTHS[d.getMonth()]} ${d.getFullYear()+543}`,
-        oldStatus:oldSt,
-        status:newSt,
-        changed:oldSt!==newSt
-      };
-    });
-    const payload2={
-      action:'notify',
-      lineEnabled:cfg2.lineEnabled,
-      lineToId:cfg2.lineToId||'',
-      lineMessage:sumMsg,
-      emailEnabled:cfg2.emailEnabled,emailTo:cfg2.emailTo||'',emailCc:cfg2.emailCc||'',
-      emailSubject:(cfg2.emailSubject||'[TBS 2026] แจ้งเตือนการเปลี่ยนแปลงสถานะ')+' — '+currentESSEmp.name,
-      emailBody:sumMsg,
-      attachExcel:true,
-      empName:currentESSEmp.name, empId:currentESSEmp.id||'',
-      attendRows,
+      return {name:emp.name,dk:k,status:newSt,old:oldSt};
+    }).filter(e=>e.old!==e.status);
+    const send=(b64,fname)=>{
+      fetch(notifyUrl,{method:'POST',body:JSON.stringify({
+        action:'notify',
+        lineEnabled:cfg2.lineEnabled,
+        lineToId:cfg2.lineToId||'',
+        lineMessage:sumMsg,
+        emailEnabled:cfg2.emailEnabled,emailTo:cfg2.emailTo||'',emailCc:cfg2.emailCc||'',
+        emailSubject:(cfg2.emailSubject||'[TBS 2026] แจ้งเตือนการเปลี่ยนแปลงสถานะ')+' — '+emp.name,
+        emailBody:sumMsg,
+        ...(b64?{attachXlsxBase64:b64,attachXlsxName:fname}:{}),
+      }),mode:'no-cors'}).catch(()=>{});
     };
-    fetch(notifyUrl,{method:'POST',body:JSON.stringify(payload2),mode:'no-cors'}).catch(()=>{});
+    // แนบ Excel รูปแบบเดียวกับหน้า "สรุปการแก้ไข" (สร้างฝั่งเบราว์เซอร์ด้วย SheetJS แล้วส่งไฟล์จริงไป)
+    ensureSheetJS(()=>{
+      try{
+        const wb=buildSaveChangeWorkbook([emp.name], modEntries, 'สรุปบันทึกสถานะพนักงาน');
+        const b64=window.XLSX.write(wb,{type:'base64',bookType:'xlsx'});
+        send(b64, `TBS2026_${emp.name}_บันทึกสถานะ_${ymd(new Date())}.xlsx`);
+      }catch(e){ send(null,null); }
+    });
     // อัปเดต snapshot "เดิม" เป็นค่าที่บันทึกรอบนี้ เพื่อให้การบันทึกครั้งถัดไปเทียบจากจุดนี้
-    essOrigAttend=JSON.parse(JSON.stringify(attendData[currentESSEmp.name]||{}));
+    essOrigAttend=JSON.parse(JSON.stringify(attendData[emp.name]||{}));
   }
   // ดึงข้อมูลล่าสุดจาก Google มายืนยัน (ช่องที่ยังไม่ยืนยันถูกคงไว้ด้วย reconcilePending)
   if(gsConfig.url){ setTimeout(()=>loadFromGoogleDb(true), 1200); }
@@ -1818,10 +1821,6 @@ function dkToShortThai(dk){
   const d=new Date(String(dk).slice(0,10)+'T12:00:00');
   return isNaN(d)?dk:`${d.getDate()} ${TH_MONTHS[d.getMonth()]}`;
 }
-function dkToThaiDate(dk){
-  const d=new Date(String(dk).slice(0,10)+'T12:00:00');
-  return isNaN(d)?dk:`${d.getDate()} ${TH_MONTHS[d.getMonth()]} ${d.getFullYear()+543}`;
-}
 function buildAdminSaveNotifyMsg(entries){
   const workdays=days.filter(d=>!isOff(d));
   const now=new Date();
@@ -1853,27 +1852,25 @@ function sendAdminSaveNotify(entries){
   if(!notifyUrl) return;
   const names=[...new Set(entries.map(e=>e.name))];
   const sumMsg=buildAdminSaveNotifyMsg(entries);
-  // แนบ Excel ตารางการแก้ไข (เดิม/ใหม่) เหมือนฝั่งพนักงาน (ESS) — แต่ละแถวระบุชื่อพนักงานด้วย
-  // เพราะ Admin หนึ่งรอบ Save อาจแก้หลายคนพร้อมกัน ต่างจาก ESS ที่มีแค่คนเดียวเสมอ
-  const attendRows=entries
-    .slice()
-    .sort((a,b)=>a.name===b.name?a.dk.localeCompare(b.dk):a.name.localeCompare(b.name))
-    .map(e=>({
-      empName:e.name, empId:empByName(e.name).id||'',
-      date:e.dk, dateLabel:dkToThaiDate(e.dk),
-      oldStatus:e.old||'', status:e.status||'', changed:true
-    }));
-  fetch(notifyUrl,{method:'POST',body:JSON.stringify({
-    action:'notify',
-    lineEnabled:cfg2.lineEnabled,lineToId:cfg2.lineToId||'',lineMessage:sumMsg,
-    emailEnabled:cfg2.emailEnabled,emailTo:cfg2.emailTo||'',emailCc:cfg2.emailCc||'',
-    emailSubject:(cfg2.emailSubject||'[TBS 2026] แจ้งเตือนการเปลี่ยนแปลงสถานะ')+' — Admin แก้ไข '+names.length+' คน',
-    emailBody:sumMsg,
-    attachExcel:true,
-    empName: names.length===1 ? names[0] : `Admin แก้ไข ${names.length} คน`,
-    empId: names.length===1 ? (empByName(names[0]).id||'') : '',
-    attendRows,
-  }),mode:'no-cors'}).catch(()=>{});
+  const send=(b64,fname)=>{
+    fetch(notifyUrl,{method:'POST',body:JSON.stringify({
+      action:'notify',
+      lineEnabled:cfg2.lineEnabled,lineToId:cfg2.lineToId||'',lineMessage:sumMsg,
+      emailEnabled:cfg2.emailEnabled,emailTo:cfg2.emailTo||'',emailCc:cfg2.emailCc||'',
+      emailSubject:(cfg2.emailSubject||'[TBS 2026] แจ้งเตือนการเปลี่ยนแปลงสถานะ')+' — Admin แก้ไข '+names.length+' คน',
+      emailBody:sumMsg,
+      ...(b64?{attachXlsxBase64:b64,attachXlsxName:fname}:{}),
+    }),mode:'no-cors'}).catch(()=>{});
+  };
+  // แนบ Excel รูปแบบเดียวกับหน้า "สรุปการแก้ไข" (สร้างฝั่งเบราว์เซอร์ด้วย SheetJS แล้วส่งไฟล์จริงไป)
+  // แทนการส่ง attendRows ให้ backend สร้างเอง ซึ่งเป็นคนละรูปแบบกับที่ต้องการ
+  ensureSheetJS(()=>{
+    try{
+      const wb=buildSaveChangeWorkbook(names, entries, 'สรุปการแก้ไขโดย Admin');
+      const b64=window.XLSX.write(wb,{type:'base64',bookType:'xlsx'});
+      send(b64, `TBS2026_Admin_แก้ไข_${ymd(new Date())}.xlsx`);
+    }catch(e){ send(null,null); }
+  });
 }
 
 // ════════════════════════════════════════════════════════════
@@ -3929,6 +3926,73 @@ function buildModifiedWorkbook(){
   const ws2=XLSX.utils.aoa_to_sheet(aoa);
   ws2['!cols']=[{wch:16},{wch:20},{wch:9},{wch:16},{wch:14},{wch:11},{wch:8},{wch:14},{wch:14}];
   XLSX.utils.book_append_sheet(wb,ws2,'รายการแก้ไข');
+  return wb;
+}
+
+// สร้าง workbook รูปแบบเดียวกับ buildModifiedWorkbook (ตารางพนักงาน × วันทำงาน + กรอบส้มไฮไลต์ช่องที่แก้
+// + คอลัมน์หมายเหตุ) แต่ใช้ตอนกด "Save" ของ Admin/ESS แทนหน้ารายงาน — ขอบเขตคือรอบ Save นี้เท่านั้น
+// names: รายชื่อพนักงานที่จะแสดงเป็นแถว (แสดงทุกคนแม้ไม่มีช่องไหนถูกแก้ในรอบนี้)
+// modEntries: [{name,dk,status}] ช่องที่ถูกแก้จริงในรอบ Save นี้ — ใช้ไฮไลต์ + สร้างหมายเหตุ
+function buildSaveChangeWorkbook(names, modEntries, titlePrefix){
+  const XLSX=window.XLSX;
+  const wb=XLSX.utils.book_new();
+  const STATE_TH={'On':'On','Off':'Off','พร.':'ลา','กิจ':'ลา','ป่วย':'ลา','':'—'};
+  const FILL={on:{rgb:'DBEAFE'},off:{rgb:'FEE2E2'},pr:{rgb:'FEF3C7'},kit:{rgb:'D1FAE5'},sick:{rgb:'EDE9FE'},we:{rgb:'F3F4F6'},white:{rgb:'FFFFFF'},head:{rgb:'374151'},title:{rgb:'1B4F8A'},sum:{rgb:'1E3A5F'}};
+  const SFILL={'On':FILL.on,'Off':FILL.off,'พร.':FILL.pr,'กิจ':FILL.kit,'ป่วย':FILL.sick,'':FILL.we};
+  const SFONT={'On':{rgb:'1E3A8A'},'Off':{rgb:'7F1D1D'},'พร.':{rgb:'78350F'},'กิจ':{rgb:'064E3B'},'ป่วย':{rgb:'4C1D95'},'':{rgb:'9CA3AF'}};
+  const thin={style:'thin',color:{rgb:'9CA3AF'}};
+  const normalBorder={top:thin,bottom:thin,left:thin,right:thin};
+  const hl={style:'medium',color:{rgb:'EA580C'}};
+  const hlBorder={top:hl,bottom:hl,left:hl,right:hl};
+  const cell=(v,fillRgb,font,align,bdr)=>({v,t:typeof v==='number'?'n':'s',s:{
+    fill:{patternType:'solid',fgColor:fillRgb||FILL.white},
+    font:{name:'Sarabun',sz:10,...(font||{})},
+    alignment:{horizontal:align||'left',vertical:'center',wrapText:true},
+    border:bdr||normalBorder
+  }});
+
+  const workdays=days.filter(d=>!isOff(d));
+  const now=new Date();
+  const modSet={}; // name\ndk -> status
+  modEntries.forEach(e=>{ modSet[e.name+'\n'+e.dk]=e.status; });
+  const members=[...new Set(names)].map(n=>empByName(n)||{name:n}).sort((a,b)=>
+    unitLabel(empUnitOf(a)).localeCompare(unitLabel(empUnitOf(b)),'th') || String(a.name).localeCompare(String(b.name),'th'));
+
+  const ws={};
+  const FIXED=['ฝ่าย','ชื่อ-นามสกุล','รหัส','ส่วน','แผนก','ตำแหน่ง'];
+  const nFixed=FIXED.length;
+  const noteCol=nFixed+workdays.length;
+  const totalCols=noteCol+1;
+  ws['A1']={v:`${titlePrefix} · ${days.length?thDate(days[0])+' – '+thDate(days[days.length-1]):''} · ช่องกรอบส้ม = ถูกแก้ไขรอบนี้`,
+    t:'s',s:{font:{name:'Sarabun',sz:12,bold:true,color:{rgb:'FFFFFF'}},fill:{patternType:'solid',fgColor:FILL.title},alignment:{horizontal:'left',vertical:'center'}}};
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:totalCols-1}}];
+  FIXED.forEach((h,ci)=>{ ws[XLSX.utils.encode_cell({r:1,c:ci})]=cell(h,FILL.head,{bold:true,color:{rgb:'FFFFFF'}},'center'); });
+  workdays.forEach((d,di)=>{
+    ws[XLSX.utils.encode_cell({r:1,c:nFixed+di})]=cell(`${d.getDate()}/${d.getMonth()+1}\n${TH_DAYS[d.getDay()]}`,FILL.head,{bold:true,color:{rgb:'FFFFFF'},sz:9},'center');
+  });
+  ws[XLSX.utils.encode_cell({r:1,c:noteCol})]=cell('หมายเหตุการแก้ไข (วันที่ → สถานะ · เวลาที่แก้)',FILL.sum,{bold:true,color:{rgb:'FFFFFF'}},'center');
+  members.forEach((m,ri)=>{
+    const r=ri+2;
+    const base=[unitLabel(empUnitOf(m)),m.name||'',m.id||'',m.division||'',m.section||'',m.role||''];
+    base.forEach((v,ci)=>{ ws[XLSX.utils.encode_cell({r,c:ci})]=cell(v,FILL.white,{sz:10},'left'); });
+    const notes=[];
+    workdays.forEach((d,di)=>{
+      const dk=dateKey(d);
+      const s=attendData[m.name]?.[dk]??'';
+      const modKey=m.name+'\n'+dk;
+      const isMod=modKey in modSet;
+      const addr=XLSX.utils.encode_cell({r,c:nFixed+di});
+      ws[addr]=cell(STATE_TH[s]||s||'—', SFILL[s]||FILL.we, {color:SFONT[s]||SFONT[''],sz:9,bold:isMod}, 'center', isMod?hlBorder:normalBorder);
+      if(isMod){ notes.push(`${d.getDate()}/${d.getMonth()+1}→${s||'—'} (${fmtDateTime(now)})`); }
+    });
+    ws[XLSX.utils.encode_cell({r,c:noteCol})]=cell(notes.join('  ·  '),{rgb:'FFF7ED'},{sz:9,color:{rgb:'7C2D12'}},'left');
+  });
+  const lastR=members.length+1;
+  ws['!ref']=XLSX.utils.encode_range({r:0,c:0},{r:lastR,c:totalCols-1});
+  ws['!autofilter']={ref:XLSX.utils.encode_range({r:1,c:0},{r:lastR,c:totalCols-1})};
+  ws['!cols']=[{wch:16},{wch:20},{wch:9},{wch:16},{wch:14},{wch:18},...workdays.map(()=>({wch:7})),{wch:48}];
+  ws['!rows']=[{hpt:22},{hpt:30},...Array(members.length).fill({hpt:20})];
+  XLSX.utils.book_append_sheet(wb,ws,'ตารางการแก้ไข');
   return wb;
 }
 
