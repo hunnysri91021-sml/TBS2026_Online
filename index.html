@@ -1818,6 +1818,10 @@ function dkToShortThai(dk){
   const d=new Date(String(dk).slice(0,10)+'T12:00:00');
   return isNaN(d)?dk:`${d.getDate()} ${TH_MONTHS[d.getMonth()]}`;
 }
+function dkToThaiDate(dk){
+  const d=new Date(String(dk).slice(0,10)+'T12:00:00');
+  return isNaN(d)?dk:`${d.getDate()} ${TH_MONTHS[d.getMonth()]} ${d.getFullYear()+543}`;
+}
 function buildAdminSaveNotifyMsg(entries){
   const workdays=days.filter(d=>!isOff(d));
   const now=new Date();
@@ -1849,12 +1853,26 @@ function sendAdminSaveNotify(entries){
   if(!notifyUrl) return;
   const names=[...new Set(entries.map(e=>e.name))];
   const sumMsg=buildAdminSaveNotifyMsg(entries);
+  // แนบ Excel ตารางการแก้ไข (เดิม/ใหม่) เหมือนฝั่งพนักงาน (ESS) — แต่ละแถวระบุชื่อพนักงานด้วย
+  // เพราะ Admin หนึ่งรอบ Save อาจแก้หลายคนพร้อมกัน ต่างจาก ESS ที่มีแค่คนเดียวเสมอ
+  const attendRows=entries
+    .slice()
+    .sort((a,b)=>a.name===b.name?a.dk.localeCompare(b.dk):a.name.localeCompare(b.name))
+    .map(e=>({
+      empName:e.name, empId:empByName(e.name).id||'',
+      date:e.dk, dateLabel:dkToThaiDate(e.dk),
+      oldStatus:e.old||'', status:e.status||'', changed:true
+    }));
   fetch(notifyUrl,{method:'POST',body:JSON.stringify({
     action:'notify',
     lineEnabled:cfg2.lineEnabled,lineToId:cfg2.lineToId||'',lineMessage:sumMsg,
     emailEnabled:cfg2.emailEnabled,emailTo:cfg2.emailTo||'',emailCc:cfg2.emailCc||'',
     emailSubject:(cfg2.emailSubject||'[TBS 2026] แจ้งเตือนการเปลี่ยนแปลงสถานะ')+' — Admin แก้ไข '+names.length+' คน',
     emailBody:sumMsg,
+    attachExcel:true,
+    empName: names.length===1 ? names[0] : `Admin แก้ไข ${names.length} คน`,
+    empId: names.length===1 ? (empByName(names[0]).id||'') : '',
+    attendRows,
   }),mode:'no-cors'}).catch(()=>{});
 }
 
