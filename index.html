@@ -1274,10 +1274,12 @@ function reconcilePending(){
 // ทำไม่ทันหรือหลุด session ไปก่อน ป้องกันข้อมูลที่แก้ไว้หายเงียบๆ
 function resendPendingEdits(){
   if(!gsConfig.url || !pendingEdits.length) return;
+  const workdays=days.filter(d=>!isOff(d));
   pendingEdits.forEach(({name,dk,status})=>{
     const emp=empByName(name);
     fetch(gsConfig.url,{method:'POST',body:JSON.stringify({
       action:'updateCell',empId:emp.id||'',memberName:name,dateLabel:dk,
+      colIndex:workdays.findIndex(d=>dateKey(d)===dk),rowIndex:EMPLOYEES.findIndex(e=>e.name===name),
       newState:status,silent:true,updateBy:AUTH?.isAdmin?(AUTH.name||'Admin'):'Employee'
     }),mode:'no-cors'}).catch(()=>{});
   });
@@ -2479,13 +2481,15 @@ function toggleSelectedEmployeeCard(name,forceValue){
   if(!assertCanEditEmpName(name)) return;
   const next = typeof forceValue==='boolean' ? forceValue : !selectedEmp.has(name);
   next ? selectedEmp.add(name) : selectedEmp.delete(name);
-  saveLocal();
+  // selectedEmp เป็น state เลือกพนักงานในเครื่องล้วนๆ (ไม่เคยโหลด/บันทึกกับ Google เลย —
+  // ดู loadFromGoogleDb ที่ reset ทุกครั้งที่โหลดใหม่) ไม่ต้องเรียก saveLocal() ซึ่งจะไปยิง
+  // syncAll ทับทั้งตารางสถานะด้วย attendData ที่แคชในเครื่องนี้โดยไม่จำเป็น (เสี่ยงทับข้อมูล
+  // ที่เพิ่งถูกแก้จากเครื่อง/แท็บอื่น) — เหมือนที่แก้ไปแล้วใน unitToggleEmp
   buildAdminSelectionPanel();
 }
 function selectAllFilteredEmployees(){
   const members=getSelectFilteredMembers();
   members.forEach(m=>{ if(isEmpAllowed(m)) selectedEmp.add(m.name); });
-  saveLocal();
   buildAdminSelectionPanel();
   toast(`เลือก ${members.length} คนที่แสดงแล้ว ✓`);
 }
@@ -2493,7 +2497,6 @@ function clearFilteredEmployees(){
   const members=getSelectFilteredMembers();
   members.forEach(m=>{ if(isEmpAllowed(m)) selectedEmp.delete(m.name); });
   selectedRows.clear();
-  saveLocal();
   buildAdminSelectionPanel();
   toast('ล้างรายการที่แสดงแล้ว');
 }
@@ -2938,12 +2941,14 @@ async function saveAndReload(){
   const changedEntries=pendingEdits.map(e=>({...e}));
   setSyncStatus('↑ กำลังบันทึก...','loading');
   // ส่งทุกช่องที่ค้างอยู่ (เผื่อ sync ทีละช่องตอนกดยังไม่สำเร็จ เช่นช่วง Offline)
+  const workdays=days.filter(d=>!isOff(d));
   const tasks=[];
   pendingEdits.forEach(({name,dk,status})=>{
     const emp=empByName(name);
     tasks.push(
       fetch(gsConfig.url,{method:'POST',body:JSON.stringify({
         action:'updateCell',empId:emp.id||'',memberName:name,dateLabel:dk,
+        colIndex:workdays.findIndex(d=>dateKey(d)===dk),rowIndex:EMPLOYEES.findIndex(e=>e.name===name),
         newState:status,silent:true,updateBy:AUTH?.isAdmin?(AUTH.name||'Admin'):'Employee'
       }),mode:'no-cors'}).catch(()=>{})
     );
