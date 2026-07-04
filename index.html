@@ -2874,7 +2874,10 @@ async function addOrUpdateEmployee(){
     toast('เพิ่มพนักงานใหม่แล้ว ✓');
   }
   EMPLOYEES.sort((a,b)=>String(a.id).localeCompare(String(b.id)));
-  saveLocalSilent();
+  // หมายเหตุ: ข้อมูลพนักงานถูกบันทึกขึ้น Google แล้วผ่าน action:'addOrUpdateEmployee' ด้านบน
+  // ไม่ต้องเรียก saveLocalSilent() ซ้ำ — เดิมมันยิง syncAll ทับ "ทั้งตารางสถานะ" ด้วย attendData
+  // ที่แคชไว้ในเครื่องนี้ ถ้าเครื่องนี้ข้อมูลไม่ใหม่สุด (เช่น แท็บถูกซ่อนไว้นาน) จะเขียนทับค่าที่
+  // เพิ่งถูกแก้จากเครื่องอื่น/แท็บอื่นให้ย้อนกลับเป็นค่าเก่าโดยไม่ตั้งใจ
   refreshEmployeeManageUI();
   refreshAdminViews();
   buildAdminSelectionPanel?.();
@@ -2911,7 +2914,8 @@ async function deleteManagedEmployee(){
   delete attendData[emp.name];
   selectedEmp.delete(emp.name);
   selectedRows.delete(emp.name);
-  saveLocalSilent();
+  // ไม่เรียก saveLocalSilent() ซ้ำ — ลบพนักงานถูกบันทึกขึ้น Google แล้วผ่าน action:'deleteEmployee'
+  // ด้านบน (เหตุผลเดียวกับ addOrUpdateEmployee — กันยิง syncAll ทับด้วย attendData ที่อาจไม่ใหม่สุด)
   clearEmployeeForm();
   refreshEmployeeManageUI();
   refreshAdminViews();
@@ -3168,32 +3172,6 @@ async function loadFromGoogleDb(silent=false){
     if(!silent) toast('โหลดจาก Google ไม่สำเร็จ: '+e.message);
     return false;
   }
-}
-
-function saveLocalSilent(){
-  // Auto-save → Google Sheet เงียบๆ (no localStorage)
-  if(!gsConfig.url) return;
-  // ส่ง rows เพื่อให้ backend syncAll_ บันทึกสถานะได้จริง (เช่นเดียวกับ saveLocal)
-  const workdays=days.filter(d=>!isOff(d));
-  const rows=EMPLOYEES.map(m=>({
-    id:m.id, name:m.name, role:m.role, company:m.company, group:m.group,
-    division:m.division, section:m.section, dept:m.dept,
-    states:workdays.map(d=>attendData[m.name]?.[dateKey(d)]??currentDef)
-  }));
-  const payload={
-    action:'syncAll',
-    rows,
-    workdayKeys:workdays.map(d=>dateKey(d)), // ISO เพื่อให้ key ตรงกับ updateCell (กัน Off เด้งกลับเป็น On)
-    employees:EMPLOYEES,
-    attendance:attendData,
-    days:days.map(d=>dateKey(d)),
-    currentDef,
-    periodName:$('periodName')?.value||'',
-    startDate:$('startDate')?.value||'',
-    endDate:$('endDate')?.value||'',
-    updateBy:AUTH?.name||'Auto'
-  };
-  fetch(gsConfig.url,{method:'POST',body:JSON.stringify(payload),mode:'no-cors'}).catch(()=>{});
 }
 
 function refreshAfterDataLoad(){
