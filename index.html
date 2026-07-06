@@ -3407,7 +3407,7 @@ function exportExcel(){
     // SHEET 1: ตารางรายวัน (styled)
     // ══════════════════════════════════════════════════════
     const ws1 = {};
-    const FIXED_COLS = ['ชื่อ-นามสกุล','รหัส','บริษัท','หน่วยงาน','ส่วน','แผนก','ฝ่าย','ตำแหน่ง'];
+    const FIXED_COLS = ['ชื่อ-นามสกุล','รหัส','ตำแหน่ง','หน่วยงาน','แผนก','ส่วน','ฝ่าย','บริษัท'];
     const nFixed = FIXED_COLS.length;
     // Row 1: title
     const titleText = `รายงานการลงชื่อมาทำงาน · ${pname} · ${thDate(sd)}–${thDate(ed)}`;
@@ -3433,7 +3433,7 @@ function exportExcel(){
     // Data rows
     members.forEach((m,ri)=>{
       const r=ri+2;
-      const rowBase=[m.name,m.id,m.company||'',m.group||'',m.division||'',m.section||'',m.dept||'',m.role||''];
+      const rowBase=[m.name,m.id,m.role||'',m.group||'',m.section||'',m.division||'',m.dept||'',m.company||''];
       rowBase.forEach((v,ci)=>{
         ws1[XLSX.utils.encode_cell({r,c:ci})]=cell(v,{fgColor:{rgb:'FFFFFF'}},{sz:10},'left');
       });
@@ -3473,7 +3473,7 @@ function exportExcel(){
     // Dimensions
     ws1['!ref']=XLSX.utils.encode_range({r:0,c:0},{r:sumR,c:totalCols-1});
     ws1['!autofilter']={ref:XLSX.utils.encode_range({r:1,c:0},{r:sumR,c:totalCols-1})};
-    ws1['!cols']=[{wch:18},{wch:9},{wch:8},{wch:14},{wch:18},{wch:14},{wch:14},{wch:20},...workdays.map(()=>({wch:9})),{wch:12},{wch:12},{wch:8},{wch:10}];
+    ws1['!cols']=[{wch:18},{wch:9},{wch:20},{wch:14},{wch:14},{wch:18},{wch:14},{wch:8},...workdays.map(()=>({wch:9})),{wch:12},{wch:12},{wch:8},{wch:10}];
     ws1['!rows']=[{hpt:24},{hpt:32},...Array(members.length).fill({hpt:24}),{hpt:30}];
     XLSX.utils.book_append_sheet(wb,ws1,'ตารางรายวัน');
 
@@ -3482,7 +3482,7 @@ function exportExcel(){
     // ══════════════════════════════════════════════════════
     const ws2={};
     ws2['A1']={v:`สรุปการมาทำงาน · ${pname} · ${thDate(sd)}–${thDate(ed)}`,t:'s',s:{font:{name:'Sarabun',sz:13,bold:true,color:{rgb:'FFFFFF'}},fill:{patternType:'solid',...FILL.header},alignment:{horizontal:'left',vertical:'center'}}};
-    const H2=['ชื่อ-นามสกุล','รหัส','บริษัท','หน่วยงาน','ส่วน','แผนก','ฝ่าย','วันทำงาน','On','Off','พร.','กิจ','ป่วย','%On','สถานะภาพรวม'];
+    const H2=['ชื่อ-นามสกุล','รหัส','หน่วยงาน','แผนก','ส่วน','ฝ่าย','บริษัท','วันทำงาน','On','Off','พร.','กิจ','ป่วย','%On','สถานะภาพรวม'];
     H2.forEach((h,ci)=>{
       ws2[XLSX.utils.encode_cell({r:1,c:ci})]=cell(h,dateHeaderFill,{bold:true,color:{rgb:'FFFFFF'}},'center');
     });
@@ -3500,7 +3500,7 @@ function exportExcel(){
       const pColor=pct>=70?{rgb:'064E3B'}:pct>=40?{rgb:'78350F'}:{rgb:'7F1D1D'};
       const status=pct>=80?'✓ มาครบ':pct>=50?'⚠ มาบางส่วน':'✗ ขาดมาก';
       const statusFill=pct>=80?FILL.pctHi:pct>=50?FILL.pctMd:FILL.pctLo;
-      const rowData=[m.name,m.id,m.company||'',m.group||'',m.division||'',m.section||'',m.dept||'',total,on,off,pr,kit,sick];
+      const rowData=[m.name,m.id,m.group||'',m.section||'',m.division||'',m.dept||'',m.company||'',total,on,off,pr,kit,sick];
       rowData.forEach((v,ci)=>{
         const isNum=typeof v==='number';
         const f=ci>=8&&ci<=12?[FILL.on,FILL.off,FILL.pr,FILL.kit,FILL.sick][ci-8]:{fgColor:{rgb:ri%2===0?'FFFFFF':'F9FAFB'}};
@@ -3512,7 +3512,7 @@ function exportExcel(){
     });
     ws2['!ref']=XLSX.utils.encode_range({r:0,c:0},{r:members.length+1,c:H2.length-1});
     ws2['!autofilter']={ref:XLSX.utils.encode_range({r:1,c:0},{r:members.length+1,c:H2.length-1})};
-    ws2['!cols']=[{wch:18},{wch:9},{wch:8},{wch:14},{wch:18},{wch:14},{wch:14},{wch:8},{wch:12},{wch:12},{wch:10},{wch:8},{wch:10},{wch:10},{wch:12}];
+    ws2['!cols']=[{wch:18},{wch:9},{wch:14},{wch:14},{wch:18},{wch:14},{wch:8},{wch:8},{wch:12},{wch:12},{wch:10},{wch:8},{wch:10},{wch:10},{wch:12}];
     ws2['!rows']=[{hpt:20},{hpt:32},...Array(members.length).fill({hpt:20})];
     XLSX.utils.book_append_sheet(wb,ws2,'สรุปรายบุคคล');
 
@@ -3865,7 +3865,7 @@ function buildModifiedWorkbook(){
     reportGroupKey(a).localeCompare(reportGroupKey(b),'th') || String(a.name).localeCompare(String(b.name),'th'));
 
   const ws={};
-  const FIXED=['ฝ่าย','ชื่อ-นามสกุล','รหัส','ส่วน','แผนก','ตำแหน่ง'];
+  const FIXED=['ฝ่าย','ชื่อ-นามสกุล','รหัส','แผนก','ส่วน','ตำแหน่ง'];
   const nFixed=FIXED.length;
   const noteCol=nFixed+workdays.length; // คอลัมน์หมายเหตุด้านขวาสุด
   const totalCols=noteCol+1;
@@ -3882,7 +3882,7 @@ function buildModifiedWorkbook(){
   // Data rows
   members.forEach((m,ri)=>{
     const r=ri+2;
-    const base=[reportGroupKey(m),m.name||'',m.id||'',m.division||'',m.section||'',m.role||''];
+    const base=[reportGroupKey(m),m.name||'',m.id||'',m.section||'',m.division||'',m.role||''];
     base.forEach((v,ci)=>{ ws[XLSX.utils.encode_cell({r,c:ci})]=cell(v,FILL.white,{sz:10},'left'); });
     const notes=[];
     workdays.forEach((d,di)=>{
@@ -3898,16 +3898,16 @@ function buildModifiedWorkbook(){
   const lastR=members.length+1;
   ws['!ref']=XLSX.utils.encode_range({r:0,c:0},{r:lastR,c:totalCols-1});
   ws['!autofilter']={ref:XLSX.utils.encode_range({r:1,c:0},{r:lastR,c:totalCols-1})};
-  ws['!cols']=[{wch:16},{wch:20},{wch:9},{wch:16},{wch:14},{wch:18},...workdays.map(()=>({wch:7})),{wch:48}];
+  ws['!cols']=[{wch:16},{wch:20},{wch:9},{wch:14},{wch:16},{wch:18},...workdays.map(()=>({wch:7})),{wch:48}];
   ws['!rows']=[{hpt:22},{hpt:30},...Array(members.length).fill({hpt:20})];
   XLSX.utils.book_append_sheet(wb,ws,'ตารางการแก้ไข');
 
   // Sheet 2: รายการแก้ไข (list) — เผื่อพิมพ์/กรอง
-  const aoa=[['ฝ่าย','พนักงาน','รหัส','ส่วน','แผนก','วันที่','สถานะ','เวลาที่แก้ไข','โดย']];
-  reportRows.forEach(r=>aoa.push([r.group,r.name,r.id,r.division,r.section,
+  const aoa=[['ฝ่าย','พนักงาน','รหัส','แผนก','ส่วน','วันที่','สถานะ','เวลาที่แก้ไข','โดย']];
+  reportRows.forEach(r=>aoa.push([r.group,r.name,r.id,r.section,r.division,
     r.dateObj?thShort(r.dateObj):r.date, r.status, r.updateTime?fmtDateTime(r.updateTime):'', r.updatedBy||'']));
   const ws2=XLSX.utils.aoa_to_sheet(aoa);
-  ws2['!cols']=[{wch:16},{wch:20},{wch:9},{wch:16},{wch:14},{wch:11},{wch:8},{wch:14},{wch:14}];
+  ws2['!cols']=[{wch:16},{wch:20},{wch:9},{wch:14},{wch:16},{wch:11},{wch:8},{wch:14},{wch:14}];
   XLSX.utils.book_append_sheet(wb,ws2,'รายการแก้ไข');
   return wb;
 }
@@ -3942,7 +3942,7 @@ function buildSaveChangeWorkbook(names, modEntries, titlePrefix){
     unitLabel(empUnitOf(a)).localeCompare(unitLabel(empUnitOf(b)),'th') || String(a.name).localeCompare(String(b.name),'th'));
 
   const ws={};
-  const FIXED=['ฝ่าย','ชื่อ-นามสกุล','รหัส','ส่วน','แผนก','ตำแหน่ง'];
+  const FIXED=['ฝ่าย','ชื่อ-นามสกุล','รหัส','แผนก','ส่วน','ตำแหน่ง'];
   const nFixed=FIXED.length;
   const noteCol=nFixed+workdays.length;
   const totalCols=noteCol+1;
@@ -3956,7 +3956,7 @@ function buildSaveChangeWorkbook(names, modEntries, titlePrefix){
   ws[XLSX.utils.encode_cell({r:1,c:noteCol})]=cell('หมายเหตุการแก้ไข (วันที่ → สถานะ · เวลาที่แก้)',FILL.sum,{bold:true,color:{rgb:'FFFFFF'}},'center');
   members.forEach((m,ri)=>{
     const r=ri+2;
-    const base=[unitLabel(empUnitOf(m)),m.name||'',m.id||'',m.division||'',m.section||'',m.role||''];
+    const base=[unitLabel(empUnitOf(m)),m.name||'',m.id||'',m.section||'',m.division||'',m.role||''];
     base.forEach((v,ci)=>{ ws[XLSX.utils.encode_cell({r,c:ci})]=cell(v,FILL.white,{sz:10},'left'); });
     const notes=[];
     workdays.forEach((d,di)=>{
@@ -3973,7 +3973,7 @@ function buildSaveChangeWorkbook(names, modEntries, titlePrefix){
   const lastR=members.length+1;
   ws['!ref']=XLSX.utils.encode_range({r:0,c:0},{r:lastR,c:totalCols-1});
   ws['!autofilter']={ref:XLSX.utils.encode_range({r:1,c:0},{r:lastR,c:totalCols-1})};
-  ws['!cols']=[{wch:16},{wch:20},{wch:9},{wch:16},{wch:14},{wch:18},...workdays.map(()=>({wch:7})),{wch:48}];
+  ws['!cols']=[{wch:16},{wch:20},{wch:9},{wch:14},{wch:16},{wch:18},...workdays.map(()=>({wch:7})),{wch:48}];
   ws['!rows']=[{hpt:22},{hpt:30},...Array(members.length).fill({hpt:20})];
   XLSX.utils.book_append_sheet(wb,ws,'ตารางการแก้ไข');
   return wb;
