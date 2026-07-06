@@ -944,6 +944,10 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
         <div class="form-grid" style="margin-bottom:12px">
           <div class="field"><label>รหัสพนักงาน</label><input id="empManageId" type="text" placeholder="เช่น 91234"></div>
           <div class="field"><label>ชื่อ-นามสกุล</label><input id="empManageName" type="text" placeholder="ชื่อ นามสกุล"></div>
+          <div class="field"><label>หน่วยงาน</label>
+            <input id="empManageUnit" list="empManageUnitList" type="text" placeholder="เช่น ทรัพยากรบุคคลและกิจการทั่วไป">
+            <datalist id="empManageUnitList"></datalist>
+          </div>
           <div class="field"><label>บริษัท</label>
             <select id="empManageGroup">
               <option value="SML">SML</option>
@@ -2812,7 +2816,7 @@ function onEmpManageDivisionChange(){
   if(dept && !dept.value){ dept.value = div==='Operations' ? 'Operations' : div; }
 }
 function clearEmployeeForm(){
-  ['empManageId','empManageName','empManageDept','empManageRole'].forEach(id=>{const el=$(id); if(el) el.value='';});
+  ['empManageId','empManageName','empManageUnit','empManageDept','empManageRole'].forEach(id=>{const el=$(id); if(el) el.value='';});
   if($('empManageGroup')) $('empManageGroup').value='SML';
   if($('empManageDivision')) $('empManageDivision').value='HR&GA';
   onEmpManageDivisionChange();
@@ -2823,6 +2827,11 @@ function refreshEmployeeManageUI(){
   const card=$('systemEmployeeManagerCard');
   if(card) card.style.display=isSystemAdmin()?'block':'none';
   onEmpManageDivisionChange();
+  const unitList=$('empManageUnitList');
+  if(unitList){
+    const units=[...new Set(EMPLOYEES.map(e=>e.group||'').filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th'));
+    unitList.innerHTML=units.map(u=>`<option value="${u}">`).join('');
+  }
   const sel=$('empManageSelect');
   if(sel){
     sel.innerHTML='<option value="">— เลือกพนักงาน —</option>'+EMPLOYEES
@@ -2842,9 +2851,10 @@ function employeePayloadFromForm(){
   const section=($('empManageSection')?.value||'HR&GA').trim();
   const dept=($('empManageDept')?.value||division).trim();
   const role=($('empManageRole')?.value||'').trim();
-  const group=section || division || company; // หน่วยงาน/สังกัด ใช้สำหรับ filter และ permission
+  const group=($('empManageUnit')?.value||'').trim() || section || division || company; // หน่วยงาน
   if(!id){toast('กรุณากรอกรหัสพนักงาน');return null;}
   if(!name){toast('กรุณากรอกชื่อ-นามสกุล');return null;}
+  if(!$('empManageUnit')?.value?.trim()){toast('กรุณากรอกหน่วยงาน');return null;}
   return {id,name,prefix:'',fname:name.split(' ')[0]||name,lname:name.split(' ').slice(1).join(' '),role,company,group,division,section,dept,level:'',grade:'',contract:'ประจำ',startDate:'',gender:'',edu:'',status:'E',active:true};
 }
 
@@ -2895,6 +2905,7 @@ function loadEmployeeToForm(){
   if(!emp){toast('ไม่พบพนักงาน');return;}
   if($('empManageId')) $('empManageId').value=emp.id||'';
   if($('empManageName')) $('empManageName').value=emp.name||'';
+  if($('empManageUnit')) $('empManageUnit').value=emp.group||'';
   if($('empManageGroup')) $('empManageGroup').value=emp.company||'SML';
   if($('empManageDivision')) $('empManageDivision').value=emp.division||'HR&GA';
   onEmpManageDivisionChange();
