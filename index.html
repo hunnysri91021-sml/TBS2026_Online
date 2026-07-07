@@ -652,16 +652,20 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
       </div>
       <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">
         <span id="matrixSyncStatus" class="sync-indicator sync-idle"></span>
-        <button class="btn btn-ghost btn-sm" onclick="togglePanel('gsPanel')">⬡ Google Sheets</button>
-        <button class="btn btn-primary btn-sm" onclick="setAdminDefaultOn()">Default = On</button>
-        <button class="btn btn-danger btn-sm" onclick="resetSelectedEmployeesToOn()">↺ Reset On (คนที่เลือก)</button>
-        <button class="btn btn-ghost btn-sm" onclick="exportExcel()">↓ Excel</button>
-        <button class="btn btn-ghost btn-sm" onclick="downloadStatusTemplate()">📥 Template ปรับสถานะ</button>
-        <button class="btn btn-ghost btn-sm" onclick="$('statusTemplateFile').click()">📤 Upload Template</button>
+        <button class="btn btn-ghost btn-sm" onclick="togglePanel('gsPanel')" title="เชื่อมต่อ/ตั้งค่าการซิงก์ข้อมูลกับ Google Sheets">⬡ Google Sheets</button>
+        <button class="btn btn-primary btn-sm" onclick="setAdminDefaultOn()" title="ตั้งสถานะเริ่มต้นของทุกวันในช่วงนี้เป็น On">Default = On</button>
+        <button class="btn btn-danger btn-sm" onclick="resetSelectedEmployeesToOn()" title="รีเซ็ตพนักงานที่ติ๊กเลือกไว้ในตารางให้กลับเป็น On ทุกวันทำงาน">↺ Reset On (คนที่เลือก)</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportExcel()" title="ดาวน์โหลดรายงานสรุปการมาทำงานเป็น Excel (ดูอย่างเดียว ไม่ใช้อัปโหลดกลับ)">↓ Excel</button>
+        <button class="btn btn-ghost btn-sm" onclick="downloadStatusTemplate()" title="ดาวน์โหลดไฟล์ Excel สำหรับกรอกปรับสถานะพนักงานที่เลือกไว้เป็นชุด แล้วอัปโหลดกลับด้วยปุ่ม Upload Template">📥 Template ปรับสถานะ</button>
+        <button class="btn btn-ghost btn-sm" onclick="$('statusTemplateFile').click()" title="เลือกไฟล์ Template ที่กรอกสถานะแล้ว เพื่อนำเข้ามาปรับสถานะหลายคน/หลายวันพร้อมกัน">📤 Upload Template</button>
         <input type="file" id="statusTemplateFile" accept=".xlsx,.xls" style="display:none" onchange="handleStatusTemplateUpload(event)">
-        <button class="btn btn-ghost btn-sm" onclick="saveAndReload()">💾 Save</button>
-        <button class="btn btn-ghost btn-sm" onclick="loadLocal()">📂 Load</button>
+        <button class="btn btn-ghost btn-sm" onclick="saveAndReload()" title="บันทึกการเปลี่ยนแปลงทั้งหมดและซิงก์ขึ้น Google Sheets — ต้องกดทุกครั้งหลังแก้ไข">💾 Save</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadLocal()" title="โหลดข้อมูลล่าสุดจาก Google Sheets กลับมาแสดงในตาราง">📂 Load</button>
       </div>
+    </div>
+    <div class="note-box" style="margin:0 18px 12px;background:#EFF6FF;border-color:#BFDBFE;color:#1E3A8A">
+      <span>ⓘ</span>
+      <span><strong>วิธีใช้ Template ปรับสถานะ</strong> — ①  เลือกพนักงานในขั้นตอน 2 ก่อน แล้วกด <strong>📥 Template ปรับสถานะ</strong> เพื่อดาวน์โหลดไฟล์ &nbsp;②  เปิดไฟล์ แก้ไขเฉพาะช่องวันที่ต้องการเปลี่ยน โดยพิมพ์รหัสสถานะ <strong>On / Off / พร. / กิจ / ป่วย</strong> เท่านั้น (เว้นว่างช่องที่ไม่แก้ไข ห้ามแก้คอลัมน์ "รหัส") &nbsp;③  กด <strong>📤 Upload Template</strong> เลือกไฟล์ที่แก้ไขแล้ว ระบบจะสรุปจำนวนที่จะเปลี่ยนให้ตรวจสอบก่อนยืนยัน &nbsp;④  กด <strong>💾 Save</strong> เพื่อบันทึกและซิงก์ขึ้น Google Sheets ให้เสร็จสมบูรณ์</span>
     </div>
     <!-- Google Sheets panel -->
     <div class="gs-panel" id="gsPanel">
@@ -2398,7 +2402,7 @@ function buildAdminWorkflowSteps(active){
   const defs=[
     {id:'overview',n:'1',t:'เห็นภาพรวม',s:'ตรวจ On/Off และแนวโน้มก่อนแก้ไข'},
     {id:'select',n:'2',t:'เลือกพนักงาน',s:'เลือกเฉพาะคนที่ต้องการแก้ไขหรือ Reset'},
-    {id:'matrix',n:'3',t:'ตารางรายวัน',s:'คลิกเปลี่ยนสถานะรายวันแล้วบันทึก'}
+    {id:'matrix',n:'3',t:'ตารางรายวัน',s:'คลิกเปลี่ยนสถานะทีละคน หรือใช้ Template ปรับทีละชุด แล้วกด Save'}
   ];
   return `<div class="workflow-steps">${defs.map(x=>`
     <div class="workflow-step ${x.id===active?'active':''}" onclick="switchAdminTab('${x.id}')" style="cursor:pointer">
