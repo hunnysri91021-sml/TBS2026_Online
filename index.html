@@ -657,7 +657,7 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
         <button class="btn btn-danger btn-sm" onclick="resetSelectedEmployeesToOn()" title="รีเซ็ตพนักงานที่ติ๊กเลือกไว้ในตารางให้กลับเป็น On ทุกวันทำงาน">↺ Reset On (คนที่เลือก)</button>
         <button class="btn btn-ghost btn-sm" onclick="exportExcel()" title="ดาวน์โหลดรายงานสรุปการมาทำงานเป็น Excel (ดูอย่างเดียว ไม่ใช้อัปโหลดกลับ)">↓ Excel</button>
         <button class="btn btn-ghost btn-sm" onclick="downloadStatusTemplate()" title="ดาวน์โหลดไฟล์ Excel สำหรับกรอกปรับสถานะพนักงานที่เลือกไว้เป็นชุด แล้วอัปโหลดกลับด้วยปุ่ม Upload Template">📥 Template ปรับสถานะ</button>
-        <button class="btn btn-ghost btn-sm" onclick="$('statusTemplateFile').click()" title="เลือกไฟล์ Template ที่กรอกสถานะแล้ว เพื่อนำเข้ามาปรับสถานะหลายคน/หลายวันพร้อมกัน">📤 Upload Template</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('statusTemplateFile').click()" title="เลือกไฟล์ Template ที่กรอกสถานะแล้ว เพื่อนำเข้ามาปรับสถานะหลายคน/หลายวันพร้อมกัน">📤 Upload Template</button>
         <input type="file" id="statusTemplateFile" accept=".xlsx,.xls" style="display:none" onchange="handleStatusTemplateUpload(event)">
         <button class="btn btn-ghost btn-sm" onclick="saveAndReload()" title="บันทึกการเปลี่ยนแปลงทั้งหมดและซิงก์ขึ้น Google Sheets — ต้องกดทุกครั้งหลังแก้ไข">💾 Save</button>
         <button class="btn btn-ghost btn-sm" onclick="loadLocal()" title="โหลดข้อมูลล่าสุดจาก Google Sheets กลับมาแสดงในตาราง">📂 Load</button>
