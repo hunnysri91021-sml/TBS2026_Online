@@ -661,11 +661,17 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
         <input type="file" id="statusTemplateFile" accept=".xlsx,.xls" style="display:none" onchange="handleStatusTemplateUpload(event)">
         <button class="btn btn-ghost btn-sm" onclick="saveAndReload()" title="บันทึกการเปลี่ยนแปลงทั้งหมดและซิงก์ขึ้น Google Sheets — ต้องกดทุกครั้งหลังแก้ไข">💾 Save</button>
         <button class="btn btn-ghost btn-sm" onclick="loadLocal()" title="โหลดข้อมูลล่าสุดจาก Google Sheets กลับมาแสดงในตาราง">📂 Load</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('timeAttendanceFile').click()" title="อัปโหลดไฟล์ Time Attendance (จากเครื่องสแกน) เพื่อเปรียบเทียบเวลามาทำงานจริงกับแผน แล้วดาวน์โหลดสรุปสำหรับจ่ายเงินเดือน">⏱ Time Attendance</button>
+        <input type="file" id="timeAttendanceFile" accept=".xls,.xlsx,.html,.htm" style="display:none" onchange="handleTimeAttendanceUpload(event)">
       </div>
     </div>
     <div class="note-box" style="margin:0 18px 12px;background:#EFF6FF;border-color:#BFDBFE;color:#1E3A8A">
       <span>ⓘ</span>
       <span><strong>วิธีใช้ Template ปรับสถานะ</strong> — ①  เลือกพนักงานในขั้นตอน 2 ก่อน แล้วกด <strong>📥 Template ปรับสถานะ</strong> เพื่อดาวน์โหลดไฟล์ &nbsp;②  เปิดไฟล์ แก้ไขเฉพาะช่องวันที่ต้องการเปลี่ยน โดยพิมพ์รหัสสถานะ <strong>On / Off / พร. / กิจ / ป่วย</strong> เท่านั้น (เว้นว่างช่องที่ไม่แก้ไข ห้ามแก้คอลัมน์ "รหัส") &nbsp;③  กด <strong>📤 Upload Template</strong> เลือกไฟล์ที่แก้ไขแล้ว ระบบจะสรุปจำนวนที่จะเปลี่ยนให้ตรวจสอบก่อนยืนยัน &nbsp;④  กด <strong>💾 Save</strong> เพื่อบันทึกและซิงก์ขึ้น Google Sheets ให้เสร็จสมบูรณ์</span>
+    </div>
+    <div class="note-box" style="margin:0 18px 12px;background:#F0FDF4;border-color:#BBF7D0;color:#14532D">
+      <span>ⓘ</span>
+      <span><strong>วิธีใช้ Time Attendance</strong> — เลือกพนักงานในขั้นตอน 2 ก่อน แล้วกด <strong>⏱ Time Attendance</strong> เลือกไฟล์ export จากเครื่องสแกนนิ้ว (รหัสพนักงานในไฟล์ต้องตรงกับระบบ) ระบบจะเทียบเวลามาทำงานจริงกับแผน แล้วดาวน์โหลด Excel สรุป 2 ชีททันที: <strong>สรุปจ่ายเงินเดือน</strong> (จำนวนวันมา/สาย/ขาด/ลาแต่ละประเภทจริง) และ <strong>เปรียบเทียบรายวัน</strong> (ไฮไลต์ช่องที่ไม่ตรงแผนให้ตรวจสอบ) — ฟีเจอร์นี้ดูข้อมูลอย่างเดียว ไม่แก้สถานะในระบบ</span>
     </div>
     <!-- Google Sheets panel -->
     <div class="gs-panel" id="gsPanel">
@@ -1135,6 +1141,7 @@ let PUB_HOLIDAYS = {
 };
 
 const TH_MONTHS=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const TH_MONTHS_SHORT=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const TH_DAYS=['อา','จ','อ','พ','พฤ','ศ','ส'];
 const STATES=['On','Off','พร.','กิจ','ป่วย',''];
 const STATE_CSS={'On':'p-on','Off':'p-off','พร.':'p-pr','กิจ':'p-kit','ป่วย':'p-sick','':'p-blank'};
@@ -1300,6 +1307,18 @@ function dateRange(s,e){
   const arr=[]; let d=new Date(s); const end=new Date(e);
   while(d<=end){arr.push(new Date(d));d.setDate(d.getDate()+1);}
   return arr;
+}
+
+// รวมวันที่ที่ให้หยุดเป็นข้อความย่อ กลุ่มตามเดือน เช่น "4,11,18,25 ก.ค.68,1,8,11,15 ส.ค.68"
+function offDatesLabel(dates){
+  if(!dates.length) return '';
+  const groups=[];
+  dates.forEach(d=>{
+    const g=groups[groups.length-1];
+    if(!g||g.year!==d.getFullYear()||g.month!==d.getMonth()) groups.push({year:d.getFullYear(),month:d.getMonth(),days:[d.getDate()]});
+    else g.days.push(d.getDate());
+  });
+  return groups.map(g=>`${g.days.join(',')} ${TH_MONTHS_SHORT[g.month]}${String(g.year+543).slice(-2)}`).join(',');
 }
 
 function thDate(d){
@@ -3430,7 +3449,7 @@ function exportExcel(){
     // Row 1: title
     const titleText = `รายงานการลงชื่อมาทำงาน · ${pname} · ${thDate(sd)}–${thDate(ed)}`;
     ws1['A1'] = {v:titleText,t:'s',s:{font:{name:'Sarabun',sz:13,bold:true,color:{rgb:'FFFFFF'}},fill:{patternType:'solid',...FILL.header},alignment:{horizontal:'left',vertical:'center'}}};
-    const totalCols = nFixed + workdays.length + 4; // fixed + days + On,Off,ลา,%On
+    const totalCols = nFixed + workdays.length + 5; // fixed + days + On,Off,ลา,%On,วันที่ที่ให้หยุด
     ws1['!merges'] = [{s:{r:0,c:0},e:{r:0,c:totalCols-1}}];
     // Row 2: date header (วันที่)
     const dateHeaderFill = {fgColor:{rgb:'374151'}};
@@ -3443,7 +3462,7 @@ function exportExcel(){
       const label=`${d.getDate()}/${d.getMonth()+1}\n${TH_DAYS[d.getDay()]}`;
       ws1[addr]=cell(label,dateHeaderFill,{bold:true,color:{rgb:'FFFFFF'}},'center');
     });
-    const sumHeaders=['On','Off','ลา','%On'];
+    const sumHeaders=['On','Off','ลา','%On','วันที่ หรือ ช่วงเวลาที่ให้หยุด'];
     sumHeaders.forEach((h,i)=>{
       const addr=XLSX.utils.encode_cell({r:1,c:nFixed+workdays.length+i});
       ws1[addr]=cell(h,{fgColor:{rgb:'1E3A5F'}},{bold:true,color:{rgb:'FFFFFF'}},'center');
@@ -3462,8 +3481,9 @@ function exportExcel(){
         ws1[addr]=cell(label,STATE_FILL[s]||FILL.we,{...(STATE_FONT[s]||{}),sz:9,bold:!!s},'center');
       });
       const total=workdays.length;
+      const offDates=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='Off');
       const on=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='On').length;
-      const off=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='Off').length;
+      const off=offDates.length;
       const la=workdays.filter(d=>['พร.','กิจ','ป่วย'].includes(attendData[m.name]?.[dateKey(d)])).length;
       const pct=total?+(on/total*100).toFixed(1):0;
       const pctFill=pct>=70?FILL.pctHi:pct>=40?FILL.pctMd:FILL.pctLo;
@@ -3472,6 +3492,7 @@ function exportExcel(){
         ws1[XLSX.utils.encode_cell({r,c:nFixed+workdays.length+i})]=cell(v,f,{bold:true,color:fc,sz:11},'center');
       });
       ws1[XLSX.utils.encode_cell({r,c:nFixed+workdays.length+3})]=cell(pct+'%',pctFill,{bold:true,color:pctColor,sz:11},'center');
+      ws1[XLSX.utils.encode_cell({r,c:nFixed+workdays.length+4})]=cell(offDatesLabel(offDates),{fgColor:{rgb:'FEE2E2'}},{sz:9},'left');
     });
     // คนมา/วัน row
     const sumR=members.length+2;
@@ -3488,10 +3509,11 @@ function exportExcel(){
     ws1[XLSX.utils.encode_cell({r:sumR,c:nFixed+workdays.length+1})]=cell('',{fgColor:{rgb:'FFFFFF'}},{},'center');
     ws1[XLSX.utils.encode_cell({r:sumR,c:nFixed+workdays.length+2})]=cell('',{fgColor:{rgb:'FFFFFF'}},{},'center');
     ws1[XLSX.utils.encode_cell({r:sumR,c:nFixed+workdays.length+3})]=cell('',{fgColor:{rgb:'FFFFFF'}},{},'center');
+    ws1[XLSX.utils.encode_cell({r:sumR,c:nFixed+workdays.length+4})]=cell('',{fgColor:{rgb:'FFFFFF'}},{},'center');
     // Dimensions
     ws1['!ref']=XLSX.utils.encode_range({r:0,c:0},{r:sumR,c:totalCols-1});
     ws1['!autofilter']={ref:XLSX.utils.encode_range({r:1,c:0},{r:sumR,c:totalCols-1})};
-    ws1['!cols']=[{wch:18},{wch:9},{wch:20},{wch:14},{wch:14},{wch:18},{wch:14},{wch:8},...workdays.map(()=>({wch:9})),{wch:12},{wch:12},{wch:8},{wch:10}];
+    ws1['!cols']=[{wch:18},{wch:9},{wch:20},{wch:14},{wch:14},{wch:18},{wch:14},{wch:8},...workdays.map(()=>({wch:9})),{wch:12},{wch:12},{wch:8},{wch:10},{wch:36}];
     ws1['!rows']=[{hpt:24},{hpt:32},...Array(members.length).fill({hpt:24}),{hpt:30}];
     XLSX.utils.book_append_sheet(wb,ws1,'ตารางรายวัน');
 
@@ -3500,7 +3522,7 @@ function exportExcel(){
     // ══════════════════════════════════════════════════════
     const ws2={};
     ws2['A1']={v:`สรุปการมาทำงาน · ${pname} · ${thDate(sd)}–${thDate(ed)}`,t:'s',s:{font:{name:'Sarabun',sz:13,bold:true,color:{rgb:'FFFFFF'}},fill:{patternType:'solid',...FILL.header},alignment:{horizontal:'left',vertical:'center'}}};
-    const H2=['ชื่อ-นามสกุล','รหัส','หน่วยงาน','แผนก','ส่วน','ฝ่าย','บริษัท','วันทำงาน','On','Off','พร.','กิจ','ป่วย','%On','สถานะภาพรวม'];
+    const H2=['ชื่อ-นามสกุล','รหัส','หน่วยงาน','แผนก','ส่วน','ฝ่าย','บริษัท','วันทำงาน','On','Off','พร.','กิจ','ป่วย','%On','สถานะภาพรวม','วันที่ หรือ ช่วงเวลาที่ให้หยุด'];
     H2.forEach((h,ci)=>{
       ws2[XLSX.utils.encode_cell({r:1,c:ci})]=cell(h,dateHeaderFill,{bold:true,color:{rgb:'FFFFFF'}},'center');
     });
@@ -3508,8 +3530,9 @@ function exportExcel(){
     members.forEach((m,ri)=>{
       const r=ri+2;
       const total=workdays.length;
+      const offDates=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='Off');
       const on=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='On').length;
-      const off=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='Off').length;
+      const off=offDates.length;
       const pr=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='พร.').length;
       const kit=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='กิจ').length;
       const sick=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='ป่วย').length;
@@ -3527,10 +3550,11 @@ function exportExcel(){
       });
       ws2[XLSX.utils.encode_cell({r,c:13})]=cell(pct+'%',pFill,{bold:true,color:pColor,sz:11},'center');
       ws2[XLSX.utils.encode_cell({r,c:14})]=cell(status,statusFill,{bold:true,color:pColor},'center');
+      ws2[XLSX.utils.encode_cell({r,c:15})]=cell(offDatesLabel(offDates),{fgColor:{rgb:ri%2===0?'FFFFFF':'F9FAFB'}},{color:{rgb:'374151'},sz:9},'left');
     });
     ws2['!ref']=XLSX.utils.encode_range({r:0,c:0},{r:members.length+1,c:H2.length-1});
     ws2['!autofilter']={ref:XLSX.utils.encode_range({r:1,c:0},{r:members.length+1,c:H2.length-1})};
-    ws2['!cols']=[{wch:18},{wch:9},{wch:14},{wch:14},{wch:18},{wch:14},{wch:8},{wch:8},{wch:12},{wch:12},{wch:10},{wch:8},{wch:10},{wch:10},{wch:12}];
+    ws2['!cols']=[{wch:18},{wch:9},{wch:14},{wch:14},{wch:18},{wch:14},{wch:8},{wch:8},{wch:12},{wch:12},{wch:10},{wch:8},{wch:10},{wch:10},{wch:12},{wch:36}];
     ws2['!rows']=[{hpt:20},{hpt:32},...Array(members.length).fill({hpt:20})];
     XLSX.utils.book_append_sheet(wb,ws2,'สรุปรายบุคคล');
 
@@ -3705,6 +3729,210 @@ function handleStatusTemplateUpload(evt){
     reader.onerror=()=>toast('อ่านไฟล์ไม่สำเร็จ');
     reader.readAsArrayBuffer(file);
   });
+}
+
+// ════════════════════════════════════════════════════════════
+//  TIME ATTENDANCE IMPORT — เทียบเวลามาทำงานจริงกับแผน สำหรับสรุปจ่ายเงินเดือน
+//  รองรับไฟล์ export จากเครื่องสแกนนิ้วที่เป็นตาราง HTML (นามสกุลไฟล์ .xls แต่เนื้อในเป็น HTML)
+// ════════════════════════════════════════════════════════════
+const TA_LEAVE_TYPE={'ลาพักร้อน':'พร.','ลากิจ':'กิจ','ลาป่วย':'ป่วย'};
+
+// แปลงเนื้อหาช่องวันในไฟล์ Time Attendance เป็นข้อมูลที่ใช้ต่อได้
+// รูปแบบที่รองรับ: '-' (ไม่มีข้อมูล) / 'ขาด' / '(กะ) เข้า HH:MM - ออก HH:MM' /
+// '(กะ) สาย N นาที เข้า.. - ออก..' / '(กะ) เข้า.. - ขาด(ลืมเช็คเอ้าท์)' /
+// 'ลาพักร้อน/ลากิจ/ลาป่วย (...)' (เต็มวัน หรือลาบางส่วน+เข้า-ออกจริง)
+function classifyTaCell(rawHtml){
+  const txt=String(rawHtml||'').replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').trim();
+  if(!txt||txt==='-') return {kind:'none',raw:txt};
+  if(txt==='ขาด') return {kind:'absent',raw:txt};
+  // จับ "ลา..." ทุกประเภท ไม่ใช่แค่ 3 แบบหลัก เพราะบางบริษัทมีประเภทลาปลีกย่อยอื่น (เช่น ลาเพื่อช่วยเหลือคู่สมรส, ลาบวช)
+  // ประเภทที่รู้จักแม็ปเป็นรหัสเดียวกับในระบบ (พร./กิจ/ป่วย) ส่วนที่เหลือเก็บเป็น "อื่นๆ" กันตกหล่นจากสรุป
+  const leaveMatch=txt.match(/^(ลา[^\s(]*)/);
+  if(leaveMatch){
+    const inOut=txt.match(/เข้า\s*([0-9]{2}:[0-9]{2})[^0-9]+ออก\s*([0-9]{2}:[0-9]{2})/);
+    return {kind:'leave',leaveType:TA_LEAVE_TYPE[leaveMatch[1]]||'อื่นๆ',leaveLabel:leaveMatch[1],partial:!!inOut,timeIn:inOut?inOut[1]:'',timeOut:inOut?inOut[2]:'',raw:txt};
+  }
+  const lateMatch=txt.match(/สาย\s*(\d+)\s*นาที/);
+  const forgotCheckout=/ลืมเช็คเอ้าท์/.test(txt);
+  const timeIns=[...txt.matchAll(/เข้า\s*([0-9]{2}:[0-9]{2})/g)].map(m=>m[1]);
+  const timeOuts=[...txt.matchAll(/ออก\s*([0-9]{2}:[0-9]{2})/g)].map(m=>m[1]);
+  if(timeIns.length){
+    return {kind:'present',timeIn:timeIns[0],timeOut:timeOuts.length?timeOuts[timeOuts.length-1]:'',lateMin:lateMatch?parseInt(lateMatch[1]):0,forgotCheckout,raw:txt};
+  }
+  return {kind:'other',raw:txt};
+}
+
+// อ่านไฟล์ Time Attendance (ตาราง HTML) → { [รหัสพนักงาน]: { name, byDate: { [dateKey]: cellData } } }
+function parseTimeAttendanceFile(text){
+  const doc=new DOMParser().parseFromString(text,'text/html');
+  const table=doc.querySelector('table');
+  if(!table) throw new Error('ไม่พบตารางข้อมูลในไฟล์ — กรุณาตรวจสอบว่าเป็นไฟล์ export จากระบบ Time Attendance');
+  const rows=[...table.querySelectorAll('tr')];
+  if(rows.length<2) throw new Error('ไฟล์ไม่มีข้อมูล');
+  const headerCells=[...rows[0].querySelectorAll('th,td')].map(c=>c.innerHTML.replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]+>/g,'').trim());
+  const idCol=headerCells.findIndex(h=>h.replace(/\s/g,'')==='รหัสพนักงาน');
+  const nameCol=headerCells.findIndex(h=>h.includes('ชื่อ'));
+  if(idCol<0) throw new Error('ไม่พบคอลัมน์ "รหัสพนักงาน" ในไฟล์ — รูปแบบไฟล์อาจไม่ตรงกับที่รองรับ');
+  const dateCols=[];
+  headerCells.forEach((h,ci)=>{
+    const m=h.match(/^(\d{2})-(\d{2})-(\d{4})/);
+    if(m) dateCols.push({ci,dk:dateKey(new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),12))});
+  });
+  if(!dateCols.length) throw new Error('ไม่พบคอลัมน์วันที่ในไฟล์ (รูปแบบที่รองรับ: DD-MM-YYYY)');
+  const byId={};
+  for(let ri=1;ri<rows.length;ri++){
+    const cells=[...rows[ri].querySelectorAll('td')];
+    if(!cells.length) continue;
+    const id=(cells[idCol]?.textContent||'').trim();
+    if(!id) continue;
+    const name=nameCol>=0?(cells[nameCol]?.textContent||'').trim():'';
+    const byDate={};
+    dateCols.forEach(({ci,dk})=>{ byDate[dk]=classifyTaCell(cells[ci]?cells[ci].innerHTML:''); });
+    byId[id]={name,byDate};
+  }
+  return byId;
+}
+
+function handleTimeAttendanceUpload(evt){
+  const file=evt.target.files && evt.target.files[0];
+  evt.target.value='';
+  if(!file) return;
+  if(!days.length){toast('กรุณาสร้างตารางก่อน');return;}
+  const members=getAllowedEmployees().filter(e=>selectedEmp.has(e.name));
+  if(!members.length){toast('กรุณาเลือกพนักงานในขั้นตอน 2 ก่อน');return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    let taData;
+    try{ taData=parseTimeAttendanceFile(String(e.target.result)); }
+    catch(err){ toast('อ่านไฟล์ไม่ได้: '+err.message,4500); return; }
+    const matched=members.filter(m=>taData[String(m.id)]);
+    if(!matched.length){ toast('ไม่พบพนักงานที่เลือกไว้ในไฟล์ Time Attendance นี้เลย — ตรวจสอบรหัสพนักงาน',4500); return; }
+    ensureSheetJS(()=>exportTimeAttendanceReport(taData,matched));
+  };
+  reader.onerror=()=>toast('อ่านไฟล์ไม่สำเร็จ');
+  reader.readAsText(file,'utf-8');
+}
+
+// สร้างและดาวน์โหลด Excel เปรียบเทียบแผน vs เวลาจริง 2 ชีท: สรุปจ่ายเงินเดือน + เปรียบเทียบรายวัน
+function exportTimeAttendanceReport(taData,members){
+  const XLSX=window.XLSX;
+  const wb=XLSX.utils.book_new();
+  const workdays=days.filter(d=>!isOff(d));
+  const pname=($('periodName')||{value:'Period'}).value;
+  const sd=days[0],ed=days[days.length-1];
+  const FILL={head:{rgb:'1B4F8A'},subhead:{rgb:'374151'},white:{rgb:'FFFFFF'},alt:{rgb:'F9FAFB'},ok:{rgb:'D1FAE5'},warn:{rgb:'FEF3C7'},bad:{rgb:'FEE2E2'},off:{rgb:'F3F4F6'}};
+  const border={top:{style:'thin',color:{rgb:'9CA3AF'}},bottom:{style:'thin',color:{rgb:'9CA3AF'}},left:{style:'thin',color:{rgb:'9CA3AF'}},right:{style:'thin',color:{rgb:'9CA3AF'}}};
+  const cell=(v,fillRgb,font,align)=>({v,t:typeof v==='number'?'n':'s',s:{
+    fill:{patternType:'solid',fgColor:fillRgb||FILL.white},
+    font:{name:'Sarabun',sz:10,...(font||{})},
+    alignment:{horizontal:align||'left',vertical:'center',wrapText:true},
+    border
+  }});
+  const FIXED=STATUS_TPL_FIXED_COLS;
+  const nFixed=FIXED.length;
+
+  // คำนวณสรุปต่อคนครั้งเดียว ใช้ทั้ง 2 ชีท
+  const stats=members.map(m=>{
+    const ta=taData[String(m.id)];
+    let plannedOn=0,actualPresent=0,lateCount=0,lateMinTotal=0,unplannedAbsent=0;
+    const leaveActual={'พร.':0,'กิจ':0,'ป่วย':0,'อื่นๆ':0};
+    const offButWorked=[];
+    const days_=[];
+    workdays.forEach(d=>{
+      const dk=dateKey(d);
+      const plan=attendData[m.name]?.[dk]??currentDef;
+      if(plan==='On') plannedOn++;
+      const rec=ta?(ta.byDate[dk]||{kind:'none'}):{kind:'none'};
+      if(rec.kind==='present'){
+        actualPresent++;
+        if(rec.lateMin>0){ lateCount++; lateMinTotal+=rec.lateMin; }
+        if(plan==='Off') offButWorked.push(d);
+      }else if(rec.kind==='leave'){
+        if(rec.leaveType) leaveActual[rec.leaveType]=(leaveActual[rec.leaveType]||0)+1;
+        if(rec.partial) actualPresent++;
+      }else if(rec.kind==='absent'){
+        if(plan==='On') unplannedAbsent++;
+      }else if(plan==='On'){
+        unplannedAbsent++; // แผนให้มาแต่ไม่มีข้อมูลสแกนเลย
+      }
+      days_.push({d,dk,plan,rec});
+    });
+    return {m,ta,plannedOn,actualPresent,lateCount,lateMinTotal,unplannedAbsent,leaveActual,offButWorked,days:days_};
+  });
+
+  // ══════════════ SHEET 1: สรุปจ่ายเงินเดือน ══════════════
+  const ws1={};
+  const H1=[...FIXED,'วันทำงานตามแผน','วันมาทำงานจริง','สาย(ครั้ง)','สาย(รวมนาที)','ขาดงาน(ไม่ตรงแผน)','ลาพักร้อนจริง','ลากิจจริง','ลาป่วยจริง','ลาอื่นๆจริง','วันที่ที่แผนให้หยุด','วันที่มาทำงานทั้งที่แผนให้หยุด'];
+  ws1['A1']={v:`สรุปเปรียบเทียบเวลาทำงานจริงกับแผน (สำหรับสรุปจ่ายเงินเดือน) · ${pname} · ${thDate(sd)}–${thDate(ed)}`,t:'s',s:{font:{name:'Sarabun',sz:12,bold:true,color:{rgb:'FFFFFF'}},fill:{patternType:'solid',fgColor:FILL.head},alignment:{horizontal:'left',vertical:'center'}}};
+  ws1['!merges']=[{s:{r:0,c:0},e:{r:0,c:H1.length-1}}];
+  H1.forEach((h,ci)=>{ ws1[XLSX.utils.encode_cell({r:1,c:ci})]=cell(h,FILL.subhead,{bold:true,color:{rgb:'FFFFFF'}},'center'); });
+  stats.forEach((st,ri)=>{
+    const r=ri+2;
+    const m=st.m;
+    const rowBase=[m.name,m.id,m.role||'',m.group||'',m.section||'',m.division||'',m.dept||'',m.company||''];
+    rowBase.forEach((v,ci)=>{ ws1[XLSX.utils.encode_cell({r,c:ci})]=cell(v,{fgColor:{rgb:ri%2===0?'FFFFFF':'F9FAFB'}},{sz:10},'left'); });
+    const notFound=!st.ta;
+    const rest=[
+      st.plannedOn, st.ta?st.actualPresent:'ไม่พบในไฟล์', st.lateCount, st.lateMinTotal,
+      st.unplannedAbsent, st.leaveActual['พร.'], st.leaveActual['กิจ'], st.leaveActual['ป่วย'], st.leaveActual['อื่นๆ'],
+    ];
+    rest.forEach((v,i)=>{
+      const ci=nFixed+i;
+      const flagBad=(i===4&&v>0)||(i===2&&v>0); // ขาดงานไม่ตรงแผน หรือ มาสาย
+      ws1[XLSX.utils.encode_cell({r,c:ci})]=cell(v,flagBad?FILL.warn:{fgColor:{rgb:ri%2===0?'FFFFFF':'F9FAFB'}},{bold:flagBad,sz:10},'center');
+    });
+    ws1[XLSX.utils.encode_cell({r,c:nFixed+9})]=cell(offDatesLabel(workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='Off')),{fgColor:{rgb:ri%2===0?'FFFFFF':'F9FAFB'}},{sz:9},'left');
+    ws1[XLSX.utils.encode_cell({r,c:nFixed+10})]=cell(offDatesLabel(st.offButWorked),st.offButWorked.length?FILL.warn:{fgColor:{rgb:ri%2===0?'FFFFFF':'F9FAFB'}},{sz:9,bold:!!st.offButWorked.length},'left');
+    if(notFound){
+      ws1[XLSX.utils.encode_cell({r,c:nFixed})]=cell(st.plannedOn,FILL.bad,{sz:10},'center');
+    }
+  });
+  ws1['!ref']=XLSX.utils.encode_range({r:0,c:0},{r:stats.length+1,c:H1.length-1});
+  ws1['!autofilter']={ref:XLSX.utils.encode_range({r:1,c:0},{r:stats.length+1,c:H1.length-1})};
+  ws1['!cols']=[{wch:18},{wch:9},{wch:20},{wch:14},{wch:14},{wch:18},{wch:14},{wch:8},{wch:12},{wch:12},{wch:9},{wch:10},{wch:12},{wch:10},{wch:9},{wch:9},{wch:9},{wch:32},{wch:32}];
+  XLSX.utils.book_append_sheet(wb,ws1,'สรุปจ่ายเงินเดือน');
+
+  // ══════════════ SHEET 2: เปรียบเทียบรายวัน ══════════════
+  const ws2={};
+  const totalCols2=nFixed+workdays.length;
+  ws2['A1']={v:`เปรียบเทียบแผน vs เวลาจริงรายวัน · ${pname} · ช่องไฮไลต์ส้ม = ไม่ตรงแผน`,t:'s',s:{font:{name:'Sarabun',sz:12,bold:true,color:{rgb:'FFFFFF'}},fill:{patternType:'solid',fgColor:FILL.head},alignment:{horizontal:'left',vertical:'center'}}};
+  ws2['!merges']=[{s:{r:0,c:0},e:{r:0,c:totalCols2-1}}];
+  FIXED.forEach((h,ci)=>{ ws2[XLSX.utils.encode_cell({r:1,c:ci})]=cell(h,FILL.subhead,{bold:true,color:{rgb:'FFFFFF'}},'center'); });
+  workdays.forEach((d,di)=>{
+    ws2[XLSX.utils.encode_cell({r:1,c:nFixed+di})]=cell(`${d.getDate()}/${d.getMonth()+1}\n${TH_DAYS[d.getDay()]}`,FILL.subhead,{bold:true,color:{rgb:'FFFFFF'},sz:9},'center');
+  });
+  stats.forEach((st,ri)=>{
+    const r=ri+2;
+    const m=st.m;
+    const rowBase=[m.name,m.id,m.role||'',m.group||'',m.section||'',m.division||'',m.dept||'',m.company||''];
+    rowBase.forEach((v,ci)=>{ ws2[XLSX.utils.encode_cell({r,c:ci})]=cell(v,{fgColor:{rgb:'FFFFFF'}},{sz:10},'left'); });
+    st.days.forEach(({dk,plan,rec},di)=>{
+      let label,mismatch=false;
+      if(rec.kind==='present'){
+        label=`${plan}\n${rec.timeIn}-${rec.timeOut}`+(rec.lateMin?` สาย${rec.lateMin}น.`:'')+(rec.forgotCheckout?' ⚠ลืมออก':'');
+        mismatch=plan==='Off'||rec.forgotCheckout;
+      }else if(rec.kind==='leave'){
+        label=`${plan}\n${rec.leaveType==='อื่นๆ'?(rec.leaveLabel||'ลาอื่นๆ'):'ลา'+rec.leaveType}${rec.partial?'(บางส่วน)':''}`;
+        mismatch=plan==='Off';
+      }else if(rec.kind==='absent'){
+        label=`${plan}\nขาด`;
+        mismatch=plan==='On';
+      }else{
+        label=`${plan}\n—`;
+        mismatch=plan==='On';
+      }
+      ws2[XLSX.utils.encode_cell({r,c:nFixed+di})]=cell(label,mismatch?FILL.warn:FILL.ok,{sz:8,bold:mismatch},'center');
+    });
+  });
+  ws2['!ref']=XLSX.utils.encode_range({r:0,c:0},{r:stats.length+1,c:totalCols2-1});
+  ws2['!cols']=[{wch:18},{wch:9},{wch:20},{wch:14},{wch:14},{wch:18},{wch:14},{wch:8},...workdays.map(()=>({wch:13}))];
+  ws2['!rows']=[{hpt:24},{hpt:32},...Array(stats.length).fill({hpt:26})];
+  XLSX.utils.book_append_sheet(wb,ws2,'เปรียบเทียบรายวัน');
+
+  const fname=`TimeAttendance_${pname.replace(/\s/g,'_')}_${thShort(sd).replace(/\//g,'')}-${thShort(ed).replace(/\//g,'')}.xlsx`;
+  XLSX.writeFile(wb,fname);
+  const notFoundCount=stats.filter(st=>!st.ta).length;
+  toast(`สร้างรายงานเปรียบเทียบแล้ว ${stats.length} คน${notFoundCount?` (ไม่พบในไฟล์ ${notFoundCount} คน)`:''} ✓`,4500);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -4667,6 +4895,7 @@ window.loadLocal = typeof loadLocal !== "undefined" ? loadLocal : function(){};
 window.exportExcel = typeof exportExcel !== "undefined" ? exportExcel : function(){};
 window.downloadStatusTemplate = typeof downloadStatusTemplate !== "undefined" ? downloadStatusTemplate : function(){};
 window.handleStatusTemplateUpload = typeof handleStatusTemplateUpload !== "undefined" ? handleStatusTemplateUpload : function(){};
+window.handleTimeAttendanceUpload = typeof handleTimeAttendanceUpload !== "undefined" ? handleTimeAttendanceUpload : function(){};
 window.testGsConnection = typeof testGsConnection !== "undefined" ? testGsConnection : function(){};
 window.initGSheet = typeof initGSheet !== "undefined" ? initGSheet : function(){};
 window.forceSyncAll = typeof forceSyncAll !== "undefined" ? forceSyncAll : function(){};
