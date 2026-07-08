@@ -1135,6 +1135,7 @@ let PUB_HOLIDAYS = {
 };
 
 const TH_MONTHS=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const TH_MONTHS_SHORT=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const TH_DAYS=['อา','จ','อ','พ','พฤ','ศ','ส'];
 const STATES=['On','Off','พร.','กิจ','ป่วย',''];
 const STATE_CSS={'On':'p-on','Off':'p-off','พร.':'p-pr','กิจ':'p-kit','ป่วย':'p-sick','':'p-blank'};
@@ -1300,6 +1301,18 @@ function dateRange(s,e){
   const arr=[]; let d=new Date(s); const end=new Date(e);
   while(d<=end){arr.push(new Date(d));d.setDate(d.getDate()+1);}
   return arr;
+}
+
+// รวมวันที่ที่ให้หยุดเป็นข้อความย่อ กลุ่มตามเดือน เช่น "4,11,18,25 ก.ค.68,1,8,11,15 ส.ค.68"
+function offDatesLabel(dates){
+  if(!dates.length) return '';
+  const groups=[];
+  dates.forEach(d=>{
+    const g=groups[groups.length-1];
+    if(!g||g.year!==d.getFullYear()||g.month!==d.getMonth()) groups.push({year:d.getFullYear(),month:d.getMonth(),days:[d.getDate()]});
+    else g.days.push(d.getDate());
+  });
+  return groups.map(g=>`${g.days.join(',')} ${TH_MONTHS_SHORT[g.month]}${String(g.year+543).slice(-2)}`).join(',');
 }
 
 function thDate(d){
@@ -3430,7 +3443,7 @@ function exportExcel(){
     // Row 1: title
     const titleText = `รายงานการลงชื่อมาทำงาน · ${pname} · ${thDate(sd)}–${thDate(ed)}`;
     ws1['A1'] = {v:titleText,t:'s',s:{font:{name:'Sarabun',sz:13,bold:true,color:{rgb:'FFFFFF'}},fill:{patternType:'solid',...FILL.header},alignment:{horizontal:'left',vertical:'center'}}};
-    const totalCols = nFixed + workdays.length + 4; // fixed + days + On,Off,ลา,%On
+    const totalCols = nFixed + workdays.length + 5; // fixed + days + On,Off,ลา,%On,วันที่ที่ให้หยุด
     ws1['!merges'] = [{s:{r:0,c:0},e:{r:0,c:totalCols-1}}];
     // Row 2: date header (วันที่)
     const dateHeaderFill = {fgColor:{rgb:'374151'}};
@@ -3443,7 +3456,7 @@ function exportExcel(){
       const label=`${d.getDate()}/${d.getMonth()+1}\n${TH_DAYS[d.getDay()]}`;
       ws1[addr]=cell(label,dateHeaderFill,{bold:true,color:{rgb:'FFFFFF'}},'center');
     });
-    const sumHeaders=['On','Off','ลา','%On'];
+    const sumHeaders=['On','Off','ลา','%On','วันที่ หรือ ช่วงเวลาที่ให้หยุด'];
     sumHeaders.forEach((h,i)=>{
       const addr=XLSX.utils.encode_cell({r:1,c:nFixed+workdays.length+i});
       ws1[addr]=cell(h,{fgColor:{rgb:'1E3A5F'}},{bold:true,color:{rgb:'FFFFFF'}},'center');
@@ -3462,8 +3475,9 @@ function exportExcel(){
         ws1[addr]=cell(label,STATE_FILL[s]||FILL.we,{...(STATE_FONT[s]||{}),sz:9,bold:!!s},'center');
       });
       const total=workdays.length;
+      const offDates=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='Off');
       const on=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='On').length;
-      const off=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='Off').length;
+      const off=offDates.length;
       const la=workdays.filter(d=>['พร.','กิจ','ป่วย'].includes(attendData[m.name]?.[dateKey(d)])).length;
       const pct=total?+(on/total*100).toFixed(1):0;
       const pctFill=pct>=70?FILL.pctHi:pct>=40?FILL.pctMd:FILL.pctLo;
@@ -3472,6 +3486,7 @@ function exportExcel(){
         ws1[XLSX.utils.encode_cell({r,c:nFixed+workdays.length+i})]=cell(v,f,{bold:true,color:fc,sz:11},'center');
       });
       ws1[XLSX.utils.encode_cell({r,c:nFixed+workdays.length+3})]=cell(pct+'%',pctFill,{bold:true,color:pctColor,sz:11},'center');
+      ws1[XLSX.utils.encode_cell({r,c:nFixed+workdays.length+4})]=cell(offDatesLabel(offDates),{fgColor:{rgb:'FEE2E2'}},{sz:9},'left');
     });
     // คนมา/วัน row
     const sumR=members.length+2;
@@ -3488,10 +3503,11 @@ function exportExcel(){
     ws1[XLSX.utils.encode_cell({r:sumR,c:nFixed+workdays.length+1})]=cell('',{fgColor:{rgb:'FFFFFF'}},{},'center');
     ws1[XLSX.utils.encode_cell({r:sumR,c:nFixed+workdays.length+2})]=cell('',{fgColor:{rgb:'FFFFFF'}},{},'center');
     ws1[XLSX.utils.encode_cell({r:sumR,c:nFixed+workdays.length+3})]=cell('',{fgColor:{rgb:'FFFFFF'}},{},'center');
+    ws1[XLSX.utils.encode_cell({r:sumR,c:nFixed+workdays.length+4})]=cell('',{fgColor:{rgb:'FFFFFF'}},{},'center');
     // Dimensions
     ws1['!ref']=XLSX.utils.encode_range({r:0,c:0},{r:sumR,c:totalCols-1});
     ws1['!autofilter']={ref:XLSX.utils.encode_range({r:1,c:0},{r:sumR,c:totalCols-1})};
-    ws1['!cols']=[{wch:18},{wch:9},{wch:20},{wch:14},{wch:14},{wch:18},{wch:14},{wch:8},...workdays.map(()=>({wch:9})),{wch:12},{wch:12},{wch:8},{wch:10}];
+    ws1['!cols']=[{wch:18},{wch:9},{wch:20},{wch:14},{wch:14},{wch:18},{wch:14},{wch:8},...workdays.map(()=>({wch:9})),{wch:12},{wch:12},{wch:8},{wch:10},{wch:36}];
     ws1['!rows']=[{hpt:24},{hpt:32},...Array(members.length).fill({hpt:24}),{hpt:30}];
     XLSX.utils.book_append_sheet(wb,ws1,'ตารางรายวัน');
 
@@ -3500,7 +3516,7 @@ function exportExcel(){
     // ══════════════════════════════════════════════════════
     const ws2={};
     ws2['A1']={v:`สรุปการมาทำงาน · ${pname} · ${thDate(sd)}–${thDate(ed)}`,t:'s',s:{font:{name:'Sarabun',sz:13,bold:true,color:{rgb:'FFFFFF'}},fill:{patternType:'solid',...FILL.header},alignment:{horizontal:'left',vertical:'center'}}};
-    const H2=['ชื่อ-นามสกุล','รหัส','หน่วยงาน','แผนก','ส่วน','ฝ่าย','บริษัท','วันทำงาน','On','Off','พร.','กิจ','ป่วย','%On','สถานะภาพรวม'];
+    const H2=['ชื่อ-นามสกุล','รหัส','หน่วยงาน','แผนก','ส่วน','ฝ่าย','บริษัท','วันทำงาน','On','Off','พร.','กิจ','ป่วย','%On','สถานะภาพรวม','วันที่ หรือ ช่วงเวลาที่ให้หยุด'];
     H2.forEach((h,ci)=>{
       ws2[XLSX.utils.encode_cell({r:1,c:ci})]=cell(h,dateHeaderFill,{bold:true,color:{rgb:'FFFFFF'}},'center');
     });
@@ -3508,8 +3524,9 @@ function exportExcel(){
     members.forEach((m,ri)=>{
       const r=ri+2;
       const total=workdays.length;
+      const offDates=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='Off');
       const on=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='On').length;
-      const off=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='Off').length;
+      const off=offDates.length;
       const pr=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='พร.').length;
       const kit=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='กิจ').length;
       const sick=workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='ป่วย').length;
@@ -3527,10 +3544,11 @@ function exportExcel(){
       });
       ws2[XLSX.utils.encode_cell({r,c:13})]=cell(pct+'%',pFill,{bold:true,color:pColor,sz:11},'center');
       ws2[XLSX.utils.encode_cell({r,c:14})]=cell(status,statusFill,{bold:true,color:pColor},'center');
+      ws2[XLSX.utils.encode_cell({r,c:15})]=cell(offDatesLabel(offDates),{fgColor:{rgb:ri%2===0?'FFFFFF':'F9FAFB'}},{color:{rgb:'374151'},sz:9},'left');
     });
     ws2['!ref']=XLSX.utils.encode_range({r:0,c:0},{r:members.length+1,c:H2.length-1});
     ws2['!autofilter']={ref:XLSX.utils.encode_range({r:1,c:0},{r:members.length+1,c:H2.length-1})};
-    ws2['!cols']=[{wch:18},{wch:9},{wch:14},{wch:14},{wch:18},{wch:14},{wch:8},{wch:8},{wch:12},{wch:12},{wch:10},{wch:8},{wch:10},{wch:10},{wch:12}];
+    ws2['!cols']=[{wch:18},{wch:9},{wch:14},{wch:14},{wch:18},{wch:14},{wch:8},{wch:8},{wch:12},{wch:12},{wch:10},{wch:8},{wch:10},{wch:10},{wch:12},{wch:36}];
     ws2['!rows']=[{hpt:20},{hpt:32},...Array(members.length).fill({hpt:20})];
     XLSX.utils.book_append_sheet(wb,ws2,'สรุปรายบุคคล');
 
