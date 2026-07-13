@@ -1040,11 +1040,20 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
             </select>
           </div>
           <div class="field" style="min-width:200px">
-            <label>จัดกลุ่มแยกตาม</label>
+            <label>กรองเฉพาะบริษัท</label>
+            <select id="repCompanyFilter">
+              <option value="ALL">ทุกบริษัท</option>
+            </select>
+          </div>
+          <div class="field" style="min-width:220px">
+            <label>จัดกลุ่มแยกตาม (หัวข้อในรายงาน)</label>
             <select id="repGroupBy">
-              <option value="unit">ฝ่าย (HR&GA / Operation / บัญชี)</option>
+              <option value="unit">กลุ่มงานที่ดูแล — HR&GA / Operation / บัญชี</option>
+              <option value="group">หน่วยงาน (Group)</option>
+              <option value="section">แผนก (Section)</option>
               <option value="division">ส่วน (Division)</option>
-              <option value="dept">ฝ่ายย่อย (Dept)</option>
+              <option value="dept">ฝ่าย (Dept)</option>
+              <option value="company">บริษัท (Company)</option>
             </select>
           </div>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:14px">
@@ -3940,7 +3949,7 @@ function exportTimeAttendanceReport(taData,members){
 //  ดึงข้อมูลจาก Google Sheet → กรองตามช่วงเวลา → จัดกลุ่มแยกตามฝ่าย → ส่งอีเมล
 // ════════════════════════════════════════════════════════════
 let reportRows = [];
-let reportMeta = {from:'',to:'',mode:'edited',groupBy:'unit',onlyChanged:true,total:0};
+let reportMeta = {from:'',to:'',mode:'edited',groupBy:'unit',companyFilter:'ALL',onlyChanged:true,total:0};
 let reportAllAttend = {}; // name -> { dateISO -> status } (ค่าล่าสุดตาม UpdateTime) สำหรับสร้างตาราง Excel
 let reportEmpMap = {};    // name -> employee object (ใช้เติมคอลัมน์ซ้าย)
 let reportModSet = {};    // `${name}\n${dateISO}` -> {status, updateTime, updatedBy} เฉพาะช่องที่ถูกแก้ในช่วงเวลา
@@ -3966,9 +3975,21 @@ function empUnitOf(emp){
 }
 function reportGroupKey(emp){
   const by=reportMeta.groupBy;
+  if(by==='group') return (emp.group||'').trim() || '— ไม่ระบุหน่วยงาน —';
+  if(by==='section') return (emp.section||'').trim() || '— ไม่ระบุแผนก —';
   if(by==='division') return (emp.division||'').trim() || '— ไม่ระบุส่วน —';
   if(by==='dept') return (emp.dept||'').trim() || '— ไม่ระบุฝ่าย —';
+  if(by==='company') return (emp.company||'').trim() || '— ไม่ระบุบริษัท —';
   return unitLabel(empUnitOf(emp))==='OTHER' ? 'อื่น ๆ' : unitLabel(empUnitOf(emp));
+}
+
+// เติมตัวเลือกบริษัทในตัวกรอง จากรายชื่อบริษัทจริงของพนักงานที่ admin คนนี้มีสิทธิ์เห็น
+function fillReportCompanyOptions(){
+  const sel=$('repCompanyFilter'); if(!sel) return;
+  const cur=sel.value||'ALL';
+  const companies=[...new Set(getAllowedEmployees().map(e=>(e.company||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th'));
+  sel.innerHTML='<option value="ALL">ทุกบริษัท</option>'+companies.map(c=>`<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+  sel.value=companies.includes(cur)?cur:'ALL';
 }
 
 function initReportPanel(){
@@ -3976,6 +3997,7 @@ function initReportPanel(){
   const cfg=getNotifyConfig();
   if($('repEmailTo') && !$('repEmailTo').value) $('repEmailTo').value=cfg.emailTo||'';
   if($('repEmailCc') && !$('repEmailCc').value) $('repEmailCc').value=cfg.emailCc||'';
+  fillReportCompanyOptions();
 }
 
 function setReportPreset(kind){
@@ -3997,6 +4019,7 @@ async function loadReportData(){
   reportMeta.to=$('repTo')?.value||'';
   reportMeta.mode=$('repMode')?.value||'edited';
   reportMeta.groupBy=$('repGroupBy')?.value||'unit';
+  reportMeta.companyFilter=$('repCompanyFilter')?.value||'ALL';
   reportMeta.onlyChanged=$('repOnlyChanged')?.checked||false;
   if(!reportMeta.from || !reportMeta.to){ toast('กรุณาเลือกช่วงเวลา'); return; }
   if(reportMeta.from>reportMeta.to){ toast('วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด'); return; }
@@ -4017,6 +4040,7 @@ async function loadReportData(){
       const emp=empList.find(e=>String(e.id)===String(r.EmpID||r.empId||'') || e.name===String(r.Name||r.name||''));
       if(!emp) return;
       if(!isSystemAdmin() && !allowed.has(emp.name)) return; // unit admin เห็นเฉพาะฝ่ายตน
+      if(reportMeta.companyFilter!=='ALL' && (emp.company||'').trim()!==reportMeta.companyFilter) return;
       let labelStr='';
       const keyStr=String(r.Key||r.key||'');
       if(keyStr.indexOf('|')>=0) labelStr=keyStr.slice(keyStr.lastIndexOf('|')+1).trim();
