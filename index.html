@@ -688,7 +688,7 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
           <div><div class="gs-title">วาง Apps Script URL</div>
           <div class="gs-desc"><a href="https://script.google.com" target="_blank" style="color:var(--brand)">script.google.com ↗</a> → Deploy → Web App → Copy URL</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <input type="text" id="gsUrl" placeholder="https://script.google.com/macros/s/AKfycbybRKPHY9-uUpyGLI_aGXY5vRSbWRbJ5-FoZ3fBapZ5gMXWdA_a8kY8M6pgPFipAh37/exec"
+            <input type="text" id="gsUrl" placeholder="https://script.google.com/macros/s/.../exec หรือ https://xxx.workers.dev"
               style="flex:1;min-width:200px;font-family:var(--fn);font-size:12px;padding:7px 10px;border:1.5px solid var(--g3);border-radius:var(--r4);outline:none">
             <button class="btn btn-outline btn-sm" id="btnGsTest" onclick="testGsConnection()">ทดสอบ</button>
           </div>
@@ -816,7 +816,7 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
           <div class="field" style="grid-column:1/-1">
             <label>🔗 Google Apps Script URL (สำหรับส่ง LINE + Email)</label>
             <div style="display:flex;gap:8px">
-              <input id="notifyGsUrl" type="text" placeholder="https://script.google.com/macros/s/AKfycbybRKPHY9-uUpyGLI_aGXY5vRSbWRbJ5-FoZ3fBapZ5gMXWdA_a8kY8M6pgPFipAh37/exec" style="flex:1">
+              <input id="notifyGsUrl" type="text" placeholder="https://script.google.com/macros/s/.../exec หรือ https://xxx.workers.dev" style="flex:1">
               <button class="btn btn-outline btn-sm" onclick="testNotifyGs()">ทดสอบ</button>
             </div>
             <div style="font-size:11px;color:var(--g5);margin-top:5px">
@@ -1180,7 +1180,9 @@ const ADMIN_PIN_DEFAULTS={HR:'',OPS:'',ACC:'',ADM:'',
 const SAVE_KEY='moo75_data_v1';
 const PIN_KEY='moo75_pins_v1';
 const GS_KEY='moo75_gs_v1';
-const DEFAULT_GS_URL='https://script.google.com/macros/s/AKfycbybRKPHY9-uUpyGLI_aGXY5vRSbWRbJ5-FoZ3fBapZ5gMXWdA_a8kY8M6pgPFipAh37/exec';
+// PDPA: ชี้ผ่าน Cloudflare Worker proxy — URL ของ Google Apps Script จริงเก็บเป็น Secret
+// ฝั่ง Cloudflare (cloudflare/worker.js) ไม่ปรากฏในซอร์สโค้ด/เบราว์เซอร์อีกต่อไป
+const DEFAULT_GS_URL='https://tbs2026.hunnysri91021.workers.dev';
 const SESSION_KEY='moo75_session_v1';
 // PDPA: รหัส System Admin เดิมถูกเผยแพร่ใน public repo แล้ว ถือว่าถูกบุกรุกแล้ว — ปิดใช้งาน fallback นี้
 // ต้องตั้งรหัส ADM ใหม่ผ่าน Google Sheet (validatePin ฝั่ง Code.gs) เท่านั้น
@@ -3267,8 +3269,16 @@ function loadGsConfig(){
     const raw=localStorage.getItem(GS_KEY);
     if(raw){Object.assign(gsConfig,JSON.parse(raw));}
 
-    // Online Web App mode: ถ้าเปิดจาก Apps Script Web App ให้ใช้ URL ปัจจุบันเป็น Backend อัตโนมัติ
+    // PDPA migration: เครื่องที่เคยเปิดเว็บก่อนย้ายไป Cloudflare Worker จะมี URL
+    // script.google.com เก่าแคชอยู่ใน localStorage — ย้ายให้ชี้ผ่าน Worker อัตโนมัติ
+    // (ยกเว้นกรณีเปิดจาก Apps Script Web App โดยตรง ซึ่งใช้ URL ของตัวเองได้ตามเดิม)
     const isAppsScriptWebApp = location.href.includes('/macros/s/') && location.href.includes('/exec');
+    if(!isAppsScriptWebApp && DEFAULT_GS_URL && gsConfig.url && gsConfig.url.includes('script.google.com') && gsConfig.url!==DEFAULT_GS_URL){
+      gsConfig.url=DEFAULT_GS_URL;
+      saveGsConfig();
+    }
+
+    // Online Web App mode: ถ้าเปิดจาก Apps Script Web App ให้ใช้ URL ปัจจุบันเป็น Backend อัตโนมัติ
     if(isAppsScriptWebApp && !gsConfig.url){
       gsConfig.url = location.href.split('?')[0];
       gsConfig.enabled = true;
@@ -4387,6 +4397,11 @@ function getNotifyConfig(){
     const cfg = JSON.parse(localStorage.getItem(NOTIFY_KEY)||'{}');
     // fallback: ถ้าไม่มี gsUrl ใน localStorage → ใช้ DEFAULT_GS_URL ที่ hardcode ไว้
     if(!cfg.gsUrl) cfg.gsUrl = gsConfig.url || DEFAULT_GS_URL || '';
+    // PDPA migration: URL script.google.com เก่าที่แคชไว้ → ชี้ผ่าน Cloudflare Worker แทน
+    if(DEFAULT_GS_URL && cfg.gsUrl && cfg.gsUrl.includes('script.google.com') && cfg.gsUrl!==DEFAULT_GS_URL){
+      cfg.gsUrl=DEFAULT_GS_URL;
+      try{ localStorage.setItem(NOTIFY_KEY, JSON.stringify(cfg)); }catch(e2){}
+    }
     return cfg;
   }catch(e){ return {gsUrl: gsConfig.url || DEFAULT_GS_URL || ''}; }
 }
