@@ -1900,7 +1900,7 @@ async function saveESSData(){
     const lineMsg=buildSaveNotifyMsg(emp,modEntries);
     const emailMsg=buildSaveNotifyMsg(emp);
     const send=(b64,fname)=>{
-      fetch(notifyUrl,{method:'POST',body:JSON.stringify({
+      fetch(withKeyUrl(notifyUrl),{method:'POST',body:JSON.stringify({
         action:'notify',
         lineEnabled:cfg2.lineEnabled,
         lineToId:cfg2.lineToId||'',
@@ -1994,7 +1994,7 @@ function sendAdminSaveNotify(entries){
   const names=[...new Set(entries.map(e=>e.name))];
   const sumMsg=buildAdminSaveNotifyMsg(entries);
   const send=(b64,fname)=>{
-    fetch(notifyUrl,{method:'POST',body:JSON.stringify({
+    fetch(withKeyUrl(notifyUrl),{method:'POST',body:JSON.stringify({
       action:'notify',
       lineEnabled:cfg2.lineEnabled,lineToId:cfg2.lineToId||'',lineMessage:sumMsg,
       emailEnabled:cfg2.emailEnabled,emailTo:cfg2.emailTo||'',emailCc:cfg2.emailCc||'',
@@ -3243,11 +3243,14 @@ function isOnlineMode(){ return !!gsUrlBase(); }
 function gsKeyParam(){ return WORKER_APP_KEY?('k='+encodeURIComponent(WORKER_APP_KEY)):''; }
 // URL สำหรับยิง POST (เขียนข้อมูล) — แนบกุญแจกัน Worker ถูกเรียกตรงๆ นอกแอป
 // หมายเหตุ: เป็นแค่ตัวกรองชั้นแรก ไม่ใช่ auth ที่สมบูรณ์ (ดูคอมเมนต์ WORKER_APP_KEY)
-function gsPostUrl(){
-  const b=gsUrlBase(); const kp=gsKeyParam();
-  if(!b || !kp) return b;
-  return b+(b.includes('?')?'&':'?')+kp;
+// withKeyUrl: แนบกุญแจให้ URL ใดๆ — ใช้กับจุดส่ง notify ที่อาจใช้ URL จากช่องตั้งค่า
+// ซึ่งต่างจาก gsUrlBase() ได้ (ถ้าไม่แนบ Worker จะตอบ 403 และไม่มีการส่ง LINE/Email เลย)
+function withKeyUrl(u){
+  u=String(u||'').trim(); const kp=gsKeyParam();
+  if(!u || !kp) return u;
+  return u+(u.includes('?')?'&':'?')+kp;
 }
+function gsPostUrl(){ return withKeyUrl(gsUrlBase()); }
 
 function jsonpGet(action, params={}){
   const base=gsUrlBase();
@@ -4602,7 +4605,7 @@ function saveNotifyConfig(){
 
   // บันทึกลง Google Sheet Config ผ่าน GAS เพื่อใช้เป็นค่า fallback ฝั่ง Server
   if(cfg.gsUrl){
-    fetch(cfg.gsUrl,{
+    fetch(withKeyUrl(cfg.gsUrl),{
       method:'POST',
       body:JSON.stringify({action:'saveNotifyConfig',...cfg}),
       mode:'no-cors'
@@ -4729,7 +4732,7 @@ async function sendTestNotify(){
   };
   const channels = [cfg.lineEnabled?'LINE':null, cfg.emailEnabled?'Email':null].filter(Boolean).join(' + ');
   try{
-    await fetch(cfg.gsUrl, {method:'POST', body:JSON.stringify(payload), mode:'no-cors'});
+    await fetch(withKeyUrl(cfg.gsUrl), {method:'POST', body:JSON.stringify(payload), mode:'no-cors'});
     showNotifyResult('✓ ส่งทดสอบแล้ว ('+channels+') — ตรวจสอบ '+channels+' ของคุณ','#064E3B');
   }catch(e){
     showNotifyResult('✗ ส่งไม่ได้: '+e.message,'var(--red-m)');
@@ -4754,7 +4757,7 @@ async function testLineOA(){
   if(!url){ showNotifyResult('กรุณาใส่ Apps Script URL ก่อน','var(--amber-m)'); return; }
   showNotifyResult('กำลังส่งทดสอบ LINE OA...','var(--g5)');
   try{
-    await fetch(url, {method:'POST', body:JSON.stringify({
+    await fetch(withKeyUrl(url), {method:'POST', body:JSON.stringify({
       action:'notify',
       lineEnabled:true,
       lineToId:toId,
