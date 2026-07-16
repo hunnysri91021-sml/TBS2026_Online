@@ -1896,16 +1896,18 @@ async function saveESSData(){
       const oldSt=essOrigAttend?.[k]||'';
       return {name:emp.name,dk:k,status:newSt,old:oldSt};
     }).filter(e=>e.old!==e.status);
-    const sumMsg=buildSaveNotifyMsg(emp,modEntries);
+    // LINE แสดงวันที่ที่เปลี่ยน (เดิม → ใหม่) · Email ใช้ข้อความสรุปแบบเดิม (รายละเอียดรายวันอยู่ใน Excel แนบ)
+    const lineMsg=buildSaveNotifyMsg(emp,modEntries);
+    const emailMsg=buildSaveNotifyMsg(emp);
     const send=(b64,fname)=>{
       fetch(notifyUrl,{method:'POST',body:JSON.stringify({
         action:'notify',
         lineEnabled:cfg2.lineEnabled,
         lineToId:cfg2.lineToId||'',
-        lineMessage:sumMsg,
+        lineMessage:lineMsg,
         emailEnabled:cfg2.emailEnabled,emailTo:cfg2.emailTo||'',emailCc:cfg2.emailCc||'',
         emailSubject:(cfg2.emailSubject||'[TBS 2026] แจ้งเตือนการเปลี่ยนแปลงสถานะ')+' — '+emp.name,
-        emailBody:sumMsg,
+        emailBody:emailMsg,
         ...(b64?{attachXlsxBase64:b64,attachXlsxName:fname}:{}),
       }),mode:'no-cors'}).catch(()=>{});
     };
