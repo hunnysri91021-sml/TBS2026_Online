@@ -6,6 +6,9 @@
 //  หน้าเว็บเรียก:   https://<worker>.workers.dev/?action=getAll&callback=...
 //  Worker ส่งต่อไป:  <GS_URL>?action=getAll&callback=...   (GS_URL เป็น Secret)
 //
+//  ⚠ ทุกครั้งที่ไฟล์นี้เปลี่ยน ต้องเข้า Cloudflare → Worker → Edit code →
+//    วางโค้ดใหม่ทั้งไฟล์ → Deploy ซ้ำด้วยเสมอ (แก้ในนี้ไม่ auto sync ไป Cloudflare)
+//
 //  วิธี deploy (ครั้งเดียว ~10 นาที):
 //  1. สมัคร/ล็อกอิน https://dash.cloudflare.com (แผนฟรีพอ)
 //  2. เมนู Workers & Pages → Create → Worker → ตั้งชื่อ เช่น tbs2026 → Deploy
@@ -30,23 +33,35 @@ const ALLOWED_GET_ACTIONS = new Set([
   'getAll', 'validatePin', 'ping', 'test',
 ]);
 
+// บาง action (เช่น validatePin) หน้าเว็บเรียกด้วย fetch() ธรรมดาแล้วอ่าน response
+// ตรงๆ (ไม่ใช่ JSONP แบบ <script>) จึงต้องมี CORS header ให้เบราว์เซอร์อ่านผลได้
+// ไม่งั้นจะโดน "blocked by CORS policy" แม้ request จะสำเร็จฝั่งเซิร์ฟเวอร์ก็ตาม
+function withCors(headers = {}) {
+  return { ...headers, 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
+}
+
 export default {
   async fetch(request, env) {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: withCors() });
+    }
+
     const GS_URL = env.GS_URL;
-    if (!GS_URL) return new Response('GS_URL secret not configured', { status: 500 });
+    if (!GS_URL) return new Response('GS_URL secret not configured', { status: 500, headers: withCors() });
 
     const url = new URL(request.url);
 
     // เช็คกุญแจก่อนทุกอย่าง (ถ้าไม่ได้ตั้ง APP_KEY ไว้ ข้ามการเช็คนี้ไปเลย)
     if (env.APP_KEY && url.searchParams.get('k') !== env.APP_KEY) {
-      return new Response('forbidden', { status: 403 });
+      return new Response('forbidden', { status: 403, headers: withCors() });
     }
 
-    // GET = โหมดอ่าน (หน้าเว็บใช้ JSONP: โหลดเป็น <script> แล้ว Google ตอบเป็น JS)
+    // GET = โหมดอ่าน (หน้าเว็บใช้ JSONP สำหรับ getAll: โหลดเป็น <script> แล้ว Google
+    // ตอบเป็น JS — และ fetch() ธรรมดาสำหรับ validatePin/ping ซึ่งอ่าน response ตรงๆ)
     if (request.method === 'GET') {
       const action = url.searchParams.get('action') || '';
       if (!ALLOWED_GET_ACTIONS.has(action)) {
-        return new Response('unknown action', { status: 400 });
+        return new Response('unknown action', { status: 400, headers: withCors() });
       }
       // ไม่ส่งกุญแจต่อไปให้ Apps Script (Code.gs ไม่รู้จัก param นี้)
       url.searchParams.delete('k');
@@ -54,10 +69,10 @@ export default {
       const body = await upstream.text();
       return new Response(body, {
         status: upstream.status,
-        headers: {
+        headers: withCors({
           'content-type': upstream.headers.get('content-type') || 'text/javascript; charset=utf-8',
           'cache-control': 'no-store',
-        },
+        }),
       });
     }
 
@@ -65,11 +80,11 @@ export default {
     if (request.method === 'POST') {
       const body = await request.text();
       // จำกัดขนาด payload กันการยิงถล่ม (ข้อมูลจริงของระบบเล็กกว่านี้มาก)
-      if (body.length > 1_000_000) return new Response('payload too large', { status: 413 });
+      if (body.length > 1_000_000) return new Response('payload too large', { status: 413, headers: withCors() });
       const upstream = await fetch(GS_URL, { method: 'POST', body, redirect: 'follow' });
-      return new Response('ok', { status: upstream.ok ? 200 : upstream.status });
+      return new Response('ok', { status: upstream.ok ? 200 : upstream.status, headers: withCors() });
     }
 
-    return new Response('method not allowed', { status: 405 });
+    return new Response('method not allowed', { status: 405, headers: withCors() });
   },
 };
