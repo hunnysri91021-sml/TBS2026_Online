@@ -136,6 +136,13 @@ Status
 | ADMIN_PIN_SYSTEM  |
 | LINE_TO           |
 | AUTO_UPDATE_GROUP |
+| LOCK_SCHEDULE     |
+
+`LOCK_SCHEDULE` เก็บ JSON กำหนดช่วงวันที่/เวลาห้ามแก้ไขข้อมูล ที่ System Admin ตั้งจากหน้าเว็บ (แท็บ ⚙ System Admin)
+รูปแบบ: `{"enabled":true,"startDate":"2026-07-20","endDate":"2026-07-25","startTime":"08:00","endTime":"17:00","message":"..."}`
+ฝั่ง Code.gs ต้องรองรับ action `setLockSchedule` (บันทึกค่า `schedule` ลง Config key นี้เป็น JSON)
+และให้ `getAll` คืนค่ากลับมาใน `config.lockSchedule` ด้วย — ระหว่างช่วงที่กำหนด ทุกคนจะแก้ไขข้อมูลไม่ได้
+จนกว่า System Admin จะกดปลดล็อคจากหน้าเว็บ
 
 ### AuditLog
 

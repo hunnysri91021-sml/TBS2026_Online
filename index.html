@@ -750,6 +750,27 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
         </div>
       </div>
     </div>
+    <div class="card" style="margin-bottom:14px;border:1.5px solid #FCD34D">
+      <div class="card-hdr"><div class="card-title">⏰ กำหนดช่วงวันที่/เวลา ห้ามแก้ไขข้อมูล (ล็อคอัตโนมัติ)</div></div>
+      <div class="card-body">
+        <div class="note-box" style="margin-top:0">ระบบจะ<strong>ล็อคห้ามทุกคนแก้ไขข้อมูลโดยอัตโนมัติ</strong> (พนักงานและแอดมินทุกฝ่าย) ในช่วงวันที่/เวลาที่กำหนดไว้ และจะแก้ไขได้อีกครั้งก็ต่อเมื่อ <strong>System Admin กดปลดล็อค</strong> หรือพ้นช่วงเวลาที่กำหนดเท่านั้น · เว้นช่องเวลาว่างไว้ = ล็อคตลอดทั้งวัน · เว้นช่องวันที่ว่างไว้ = ล็อคทุกวันตามช่วงเวลาที่ระบุ</div>
+        <div class="form-grid" style="margin-bottom:12px">
+          <div class="field"><label>ล็อคตั้งแต่วันที่</label><input type="date" id="lockSchedStart"></div>
+          <div class="field"><label>ถึงวันที่</label><input type="date" id="lockSchedEnd"></div>
+          <div class="field"><label>เวลาเริ่มล็อค (ของแต่ละวัน)</label><input type="time" id="lockSchedTimeStart"></div>
+          <div class="field"><label>เวลาสิ้นสุดล็อค</label><input type="time" id="lockSchedTimeEnd"></div>
+        </div>
+        <div class="field" style="margin-bottom:12px">
+          <label>ข้อความแจ้งเตือนที่จะแสดงระหว่างล็อค</label>
+          <input type="text" id="lockSchedMsg" placeholder="ระบบล็อคห้ามแก้ไขข้อมูลตามช่วงเวลาที่ผู้ดูแลระบบกำหนด">
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-danger btn-sm" onclick="saveLockSchedule(true)">🔒 บันทึกและเปิดใช้การล็อค</button>
+          <button class="btn btn-success btn-sm" onclick="saveLockSchedule(false)">🔓 ปลดล็อค (ปิดใช้งาน)</button>
+          <span id="lockSchedStatusTxt" style="font-size:12px;font-weight:600"></span>
+        </div>
+      </div>
+    </div>
     <div class="card" style="margin-bottom:14px">
       <div class="card-hdr"><div class="card-title">⚙ ตั้งค่าช่วงเวลา / Default / Reset ระบบ</div></div>
       <div class="card-body">
@@ -1211,6 +1232,54 @@ let adminSelectSection='ALL';
 let adminSelectDept='ALL';
 let systemLock={locked:false,message:''}; // สถานะปิดระบบห้ามแก้ไข — โหลดจาก Config ฝั่ง server ผ่าน getAll
 let essLockedNames=new Set(); // รายชื่อพนักงานที่ถูกล็อกห้ามแก้ไขสถานะตัวเอง (ESS) — โหลดจาก Config ฝั่ง server
+// ล็อคตามกำหนดวันที่/เวลา — System Admin กำหนดช่วงห้ามแก้ไขล่วงหน้า ระบบล็อคเองอัตโนมัติ
+// ทุกคนแก้ไขไม่ได้จนกว่าจะพ้นช่วง หรือ System Admin กดปลดล็อค (enabled=false)
+// ซิงก์ผ่าน Config ฝั่ง server (action setLockSchedule / getAll คืน config.lockSchedule)
+// และเก็บสำรองใน localStorage เผื่อ Code.gs ยังไม่รองรับ (จะมีผลเฉพาะเครื่องที่ตั้งค่า)
+const LOCK_SCHEDULE_KEY='moo75_lock_schedule_v1';
+let lockSchedule={enabled:false,startDate:'',endDate:'',startTime:'',endTime:'',message:''};
+function normalizeLockSchedule(raw){
+  const s=(raw&&typeof raw==='object')?raw:{};
+  return {enabled:!!s.enabled,startDate:String(s.startDate||''),endDate:String(s.endDate||''),
+          startTime:String(s.startTime||''),endTime:String(s.endTime||''),message:String(s.message||'')};
+}
+function saveLockScheduleLocal(){ try{ localStorage.setItem(LOCK_SCHEDULE_KEY, JSON.stringify(lockSchedule)); }catch(e){} }
+function loadLockScheduleLocal(){
+  try{ const raw=localStorage.getItem(LOCK_SCHEDULE_KEY); if(raw) lockSchedule=normalizeLockSchedule(JSON.parse(raw)); }catch(e){}
+}
+loadLockScheduleLocal();
+// เช็คว่า "ขณะนี้" อยู่ในช่วงล็อคที่กำหนดหรือไม่ (เทียบกับเวลาเครื่องผู้ใช้)
+function isLockScheduleActive(){
+  const s=lockSchedule;
+  if(!s.enabled) return false;
+  if(!s.startDate&&!s.endDate&&!s.startTime&&!s.endTime) return false; // ยังไม่กำหนดอะไรเลย = ไม่ล็อค
+  const now=new Date(), p=n=>String(n).padStart(2,'0');
+  const today=`${now.getFullYear()}-${p(now.getMonth()+1)}-${p(now.getDate())}`; // ใช้เวลาท้องถิ่น ไม่ใช้ toISOString (UTC เพี้ยน 7 ชม.)
+  if(s.startDate&&today<s.startDate) return false;
+  if(s.endDate&&today>s.endDate) return false;
+  if(s.startTime||s.endTime){
+    const hm=`${p(now.getHours())}:${p(now.getMinutes())}`;
+    const st=s.startTime||'00:00', en=s.endTime||'23:59';
+    if(st<=en){ if(hm<st||hm>en) return false; }
+    else { if(hm<st&&hm>en) return false; } // ช่วงข้ามเที่ยงคืน เช่น 22:00–06:00
+  }
+  return true;
+}
+function thDateStr(iso){ const d=new Date(iso+'T12:00:00'); return isNaN(d)?iso:thDate(d); }
+function lockScheduleRangeText(){
+  const s=lockSchedule, parts=[];
+  if(s.startDate||s.endDate){
+    if(s.startDate&&s.endDate) parts.push(s.startDate===s.endDate?`วันที่ ${thDateStr(s.startDate)}`:`วันที่ ${thDateStr(s.startDate)} – ${thDateStr(s.endDate)}`);
+    else if(s.startDate) parts.push(`ตั้งแต่วันที่ ${thDateStr(s.startDate)}`);
+    else parts.push(`ถึงวันที่ ${thDateStr(s.endDate)}`);
+  }else parts.push('ทุกวัน');
+  if(s.startTime||s.endTime) parts.push(`เวลา ${s.startTime||'00:00'}–${s.endTime||'23:59'} น.`);
+  else parts.push('ตลอดทั้งวัน');
+  return parts.join(' ');
+}
+function lockScheduleMessage(){
+  return (lockSchedule.message||'ระบบล็อคห้ามแก้ไขข้อมูลตามช่วงเวลาที่ผู้ดูแลระบบกำหนด')+` (${lockScheduleRangeText()}) — ปลดล็อคได้เฉพาะ System Admin`;
+}
 function isEssLockedName(name){ return essLockedNames.has(name); }
 
 // ════ ADMIN PERMISSION SCOPE ════
@@ -1246,9 +1315,14 @@ function assertCanEditEmpName(name){
   return true;
 }
 // คืน true ถ้ายังแก้ไขข้อมูลได้ (ระบบไม่ถูกปิด) — ใช้กันก่อนทุกจุดที่แก้ attendData
+// ครอบทั้งปิดระบบด้วยมือ (systemLock) และล็อคอัตโนมัติตามช่วงวันที่/เวลา (lockSchedule)
 function assertSystemNotLocked(){
   if(systemLock.locked){
     toast(systemLock.message || 'ระบบถูกปิดชั่วคราว ไม่สามารถแก้ไขข้อมูลได้ในขณะนี้');
+    return false;
+  }
+  if(isLockScheduleActive()){
+    toast('🔒 '+lockScheduleMessage(),4000);
     return false;
   }
   return true;
@@ -1259,6 +1333,9 @@ function renderSystemLockBanner(){
   if(systemLock.locked){
     banner.style.display='block';
     banner.textContent='🔒 '+(systemLock.message||'ระบบถูกปิดชั่วคราว ไม่สามารถแก้ไขข้อมูลได้ในขณะนี้');
+  } else if(isLockScheduleActive()){
+    banner.style.display='block';
+    banner.textContent='🔒 '+lockScheduleMessage();
   } else {
     banner.style.display='none';
   }
@@ -1953,6 +2030,67 @@ async function toggleSystemLock(locked){
 }
 
 // ════════════════════════════════════════════════════════════
+//  LOCK SCHEDULE (System Admin เท่านั้น) — ล็อคห้ามแก้ไขอัตโนมัติตามช่วงวันที่/เวลา
+//  ระหว่างช่วงที่กำหนด ทุกคนแก้ไขไม่ได้ จนกว่า System Admin จะกดปลดล็อค
+//  ⚠ ฝั่ง Code.gs ต้องรองรับเพิ่ม: action 'setLockSchedule' เก็บ JSON ลง Config
+//    key LOCK_SCHEDULE และ getAll ต้องคืน config.lockSchedule กลับมาด้วย
+//    (ระหว่างที่ยังไม่อัปเดต Code.gs ค่าจะเก็บใน localStorage มีผลเฉพาะเครื่องที่ตั้งค่า)
+// ════════════════════════════════════════════════════════════
+function renderLockScheduleAdminUI(fillInputs=false){
+  const s=lockSchedule;
+  if(fillInputs){
+    const set=(id,v)=>{ const el=$(id); if(el&&!el.value) el.value=v; };
+    set('lockSchedStart',s.startDate); set('lockSchedEnd',s.endDate);
+    set('lockSchedTimeStart',s.startTime); set('lockSchedTimeEnd',s.endTime);
+    set('lockSchedMsg',s.message);
+  }
+  const txt=$('lockSchedStatusTxt');
+  if(!txt) return;
+  if(!s.enabled){
+    txt.textContent='สถานะ: 🔓 ยังไม่เปิดใช้งาน';
+    txt.style.color='var(--g5)';
+  }else if(isLockScheduleActive()){
+    txt.textContent=`สถานะ: 🔒 กำลังล็อคอยู่ขณะนี้ — ${lockScheduleRangeText()}`;
+    txt.style.color='#DC2626';
+  }else{
+    txt.textContent=`สถานะ: ⏳ เปิดใช้งานแล้ว รอถึงช่วงล็อค — ${lockScheduleRangeText()}`;
+    txt.style.color='#B45309';
+  }
+}
+async function saveLockSchedule(enable){
+  if(!isSystemAdmin()){ toast('ใช้ได้เฉพาะ System Admin เท่านั้น'); return; }
+  const s=normalizeLockSchedule({
+    enabled:enable,
+    startDate:$('lockSchedStart')?.value||'',
+    endDate:$('lockSchedEnd')?.value||'',
+    startTime:$('lockSchedTimeStart')?.value||'',
+    endTime:$('lockSchedTimeEnd')?.value||'',
+    message:$('lockSchedMsg')?.value?.trim()||'',
+  });
+  if(enable){
+    if(!s.startDate&&!s.endDate&&!s.startTime&&!s.endTime){ toast('กรุณากำหนดวันที่หรือช่วงเวลาอย่างน้อย 1 อย่างก่อนเปิดใช้การล็อค'); return; }
+    if(s.startDate&&s.endDate&&s.startDate>s.endDate){ toast('วันที่เริ่มล็อคต้องไม่เกินวันที่สิ้นสุด'); return; }
+    if(!confirm(`ยืนยันเปิดใช้การล็อคตามช่วงเวลานี้?\n\nช่วงที่กำหนด: ${lockScheduleRangeTextOf(s)}\n\nระหว่างช่วงดังกล่าว พนักงานและแอดมินทุกฝ่ายจะแก้ไขข้อมูลไม่ได้ จนกว่า System Admin จะกดปลดล็อค`)) return;
+  }
+  lockSchedule=s;
+  saveLockScheduleLocal();
+  if(gsConfig.url){
+    try{
+      await fetch(gsPostUrl(),{method:'POST',body:JSON.stringify({action:'setLockSchedule',schedule:s,updateBy:AUTH.name||'System Admin'}),mode:'no-cors'});
+    }catch(err){ toast('ส่งไป Google ไม่สำเร็จ (บันทึกไว้ในเครื่องนี้แล้ว): '+err.message); }
+  }
+  renderSystemLockBanner();
+  renderLockScheduleAdminUI();
+  toast(enable?'เปิดใช้การล็อคตามช่วงเวลาแล้ว 🔒':'ปลดล็อคแล้ว — แก้ไขข้อมูลได้ตามปกติ 🔓');
+}
+// ข้อความช่วงที่กำหนด จาก schedule ที่ยังไม่ commit (ใช้ใน confirm ก่อนบันทึก)
+function lockScheduleRangeTextOf(s){
+  const keep=lockSchedule; lockSchedule=s;
+  const t=lockScheduleRangeText(); lockSchedule=keep;
+  return t;
+}
+
+// ════════════════════════════════════════════════════════════
 //  ADMIN TABS
 // ════════════════════════════════════════════════════════════
 function switchAdminTab(tab){
@@ -2007,6 +2145,7 @@ function switchAdminTab(tab){
     buildEmpSummary();
     renderHolidayList();
     renderSystemLockAdminUI();
+    renderLockScheduleAdminUI(true);
   }
 }
 
@@ -2732,6 +2871,7 @@ function getResetTargetNames(){
 }
 
 function setStatusForNames(names,status){
+  if(!assertSystemNotLocked()) return false; // กันปุ่ม Reset/ล้างสถานะแบบกลุ่ม ระหว่างระบบถูกปิดหรือล็อคตามช่วงเวลา
   if(!days.length){toast('ยังไม่ได้ตั้งช่วงเวลา');return false;}
   const allowed=getAllowedEmployeeNames();
   const target=names.filter(n=>allowed.has(n));
@@ -2800,6 +2940,7 @@ function resetCurrentPeriodToOn(){
     toast('Reset ทั้งระบบใช้ได้เฉพาะ System Admin เท่านั้น');
     return;
   }
+  if(!assertSystemNotLocked()) return;
   if(!days.length){toast('ยังไม่ได้ตั้งช่วงเวลา');return;}
   if(!confirm('ยืนยัน Reset สถานะทุกคนในช่วงเวลาปัจจุบันเป็น On?\nหมายเหตุ: เสาร์-อาทิตย์/วันหยุดนักขัตฤกษ์จะเว้นว่างเหมือนเดิม')) return;
   currentDef='On';
@@ -3162,6 +3303,16 @@ async function loadFromGoogleDb(silent=false){
     if(data.config){
       systemLock.locked=!!data.config.systemLocked;
       systemLock.message=data.config.systemLockMsg||'';
+      // ล็อคตามกำหนดวันที่/เวลา — server เป็นแหล่งความจริงถ้า Code.gs คืน key นี้มา
+      // (รองรับทั้งแบบ object และ JSON string) ถ้าไม่คืนมา ใช้ค่าใน localStorage ต่อไป
+      if(data.config.lockSchedule!==undefined&&data.config.lockSchedule!==null&&data.config.lockSchedule!==''){
+        try{
+          const raw=typeof data.config.lockSchedule==='string'?JSON.parse(data.config.lockSchedule):data.config.lockSchedule;
+          lockSchedule=normalizeLockSchedule(raw);
+          saveLockScheduleLocal();
+          renderLockScheduleAdminUI();
+        }catch(e){}
+      }
       renderSystemLockBanner();
       essLockedNames=new Set(Array.isArray(data.config.essLockedNames)?data.config.essLockedNames:[]);
     }
@@ -4627,6 +4778,8 @@ async function init(){
   }
   // Start on ESS screen
   showScreen('screenESS');
+  // แสดงแบนเนอร์ล็อคตั้งแต่เปิดหน้า (ครอบกรณีล็อคตามช่วงเวลาที่เก็บไว้ใน localStorage แม้โหลด Google ไม่สำเร็จ)
+  renderSystemLockBanner();
   if(sessOk) $('btnAdminSwitch').style.display='inline-flex';
   // Build public dashboard on load
   setTimeout(buildPublicDashboard, 100);
@@ -4649,6 +4802,10 @@ setInterval(()=>{
     loadFromGoogleDb(true);
   }
 },30000);
+
+// ประเมินการล็อคตามช่วงวันที่/เวลาใหม่เป็นระยะ ให้แบนเนอร์ล็อคขึ้น/หายเอง
+// เมื่อเวลาเดินเข้า/พ้นช่วงที่ System Admin กำหนด โดยไม่ต้องรอโหลดจาก Google หรือ refresh หน้า
+setInterval(()=>{ renderSystemLockBanner(); renderLockScheduleAdminUI(); },30000);
 
 // ── Expose to global scope ──
 window.onFilterChange = onFilterChange;
@@ -4982,6 +5139,9 @@ window.loadEmployeeToForm = typeof loadEmployeeToForm !== "undefined" ? loadEmpl
 window.deleteManagedEmployee = typeof deleteManagedEmployee !== "undefined" ? deleteManagedEmployee : function(){};
 window.refreshEmployeeManageUI = typeof refreshEmployeeManageUI !== "undefined" ? refreshEmployeeManageUI : function(){};
 window.toggleSystemLock = typeof toggleSystemLock !== "undefined" ? toggleSystemLock : function(){};
+window.saveLockSchedule = typeof saveLockSchedule !== "undefined" ? saveLockSchedule : function(){};
+window.isLockScheduleActive = typeof isLockScheduleActive !== "undefined" ? isLockScheduleActive : function(){};
+window.assertSystemNotLocked = typeof assertSystemNotLocked !== "undefined" ? assertSystemNotLocked : function(){};
 
 }); // DOMContentLoaded
 </script>
