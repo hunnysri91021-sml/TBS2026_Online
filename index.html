@@ -1183,6 +1183,10 @@ const GS_KEY='moo75_gs_v1';
 // PDPA: ชี้ผ่าน Cloudflare Worker proxy — URL ของ Google Apps Script จริงเก็บเป็น Secret
 // ฝั่ง Cloudflare (cloudflare/worker.js) ไม่ปรากฏในซอร์สโค้ด/เบราว์เซอร์อีกต่อไป
 const DEFAULT_GS_URL='https://tbs2026.hunnysri91021.workers.dev';
+// PDPA: กุญแจกันคนเปิด Worker URL ตรงๆ โดยไม่ผ่านแอป (ต้องตั้งค่าเดียวกันเป็น
+// Secret ชื่อ APP_KEY ใน Cloudflare Worker) — เป็นแค่ตัวกรองชั้นแรก ไม่ใช่ระบบ auth
+// ที่สมบูรณ์ เพราะค่านี้ก็ยังฝังอยู่ในโค้ด public เหมือนกัน (ดูคอมเมนต์ gsPostUrl())
+const WORKER_APP_KEY='XD8jSeXzJiFMTKD8wT8FxvdLyRy5z3Z1';
 const SESSION_KEY='moo75_session_v1';
 // PDPA: รหัส System Admin เดิมถูกเผยแพร่ใน public repo แล้ว ถือว่าถูกบุกรุกแล้ว — ปิดใช้งาน fallback นี้
 // ต้องตั้งรหัส ADM ใหม่ผ่าน Google Sheet (validatePin ฝั่ง Code.gs) เท่านั้น
@@ -1311,7 +1315,7 @@ function resendPendingEdits(){
   const workdays=days.filter(d=>!isOff(d));
   pendingEdits.forEach(({name,dk,status})=>{
     const emp=empByName(name);
-    fetch(gsConfig.url,{method:'POST',body:JSON.stringify({
+    fetch(gsPostUrl(),{method:'POST',body:JSON.stringify({
       action:'updateCell',empId:emp.id||'',memberName:name,dateLabel:dk,
       colIndex:workdays.findIndex(d=>dateKey(d)===dk),rowIndex:EMPLOYEES.findIndex(e=>e.name===name),
       newState:status,silent:true,updateBy:AUTH?.isAdmin?(AUTH.name||'Admin'):'Employee'
@@ -1455,7 +1459,7 @@ async function saveHolidaysToGoogle(){
   const holidays=Object.keys(PUB_HOLIDAYS).map(d=>({date:d,name:PUB_HOLIDAYS[d]}));
   if(st){st.textContent='กำลังบันทึก...';st.style.color='var(--g5)';}
   try{
-    await fetch(url,{method:'POST',body:JSON.stringify({action:'saveHolidays',holidays,updateBy:AUTH?.name||'System Admin'}),mode:'no-cors'});
+    await fetch(gsPostUrl(),{method:'POST',body:JSON.stringify({action:'saveHolidays',holidays,updateBy:AUTH?.name||'System Admin'}),mode:'no-cors'});
     if(st){st.textContent='✓ บันทึกวันหยุดแล้ว';st.style.color='#064E3B';}
     toast('บันทึกวันหยุดขึ้น Google แล้ว ✓');
     // คำนวณวันทำงานใหม่ทันที (isOff อ่านจาก PUB_HOLIDAYS ที่อัปเดตแล้ว)
@@ -1473,7 +1477,7 @@ function getPin(unit){return getPins()[unit]||ADMIN_PIN_DEFAULTS[unit]||(unit===
 async function validatePinWithGoogle(code){
   if(!gsConfig.url) return null;
   try{
-    const url=gsConfig.url+'?action=validatePin&pin='+encodeURIComponent(code)+'&t='+Date.now();
+    const url=gsConfig.url+'?action=validatePin&pin='+encodeURIComponent(code)+'&'+gsKeyParam()+'&t='+Date.now();
     const res=await fetch(url,{method:'GET'});
     const data=await res.json();
     if(data && data.ok && data.unit) return data;
@@ -1489,7 +1493,7 @@ async function savePins(){
   // PIN บันทึก Google Sheet เท่านั้น
   if(gsConfig.url){
     try{
-      await fetch(gsConfig.url,{method:'POST',body:JSON.stringify({action:'saveAdminPins',pins,updateBy:AUTH?.name||'System Admin'}),mode:'no-cors'});
+      await fetch(gsPostUrl(),{method:'POST',body:JSON.stringify({action:'saveAdminPins',pins,updateBy:AUTH?.name||'System Admin'}),mode:'no-cors'});
       toast('บันทึกรหัสใน Google Sheet แล้ว ✓');
       ADMIN_UNITS.forEach(u=>{const inp=$('pin'+u);if(inp)inp.value='';});
       return;
@@ -1937,7 +1941,7 @@ async function toggleSystemLock(locked){
   const message=$('systemLockMsgInput')?.value?.trim()||'';
   if(locked && !confirm('ยืนยันปิดระบบห้ามแก้ไขข้อมูลทั้งระบบ?')) return;
   try{
-    await fetch(gsConfig.url,{method:'POST',body:JSON.stringify({action:'setSystemLock',locked,message,updateBy:AUTH.name||'System Admin'}),mode:'no-cors'});
+    await fetch(gsPostUrl(),{method:'POST',body:JSON.stringify({action:'setSystemLock',locked,message,updateBy:AUTH.name||'System Admin'}),mode:'no-cors'});
     systemLock.locked=locked;
     if(message) systemLock.message=message;
     renderSystemLockBanner();
@@ -2764,7 +2768,7 @@ function resetSelectedEmployeesToOff(){
 async function setEssLockOnServer(names,locked){
   if(!gsConfig.url){toast('กรุณาเชื่อม Google Sheets / Web App ก่อน');return false;}
   try{
-    await fetch(gsConfig.url,{method:'POST',body:JSON.stringify({action:'setEssLock',names,locked,updateBy:AUTH.name||'System Admin'}),mode:'no-cors'});
+    await fetch(gsPostUrl(),{method:'POST',body:JSON.stringify({action:'setEssLock',names,locked,updateBy:AUTH.name||'System Admin'}),mode:'no-cors'});
     names.forEach(n=>locked?essLockedNames.add(n):essLockedNames.delete(n));
     return true;
   }catch(e){toast('ส่งคำสั่งล็อกไปยัง Google ล้มเหลว');return false;}
@@ -2999,7 +3003,7 @@ async function saveAndReload(){
   pendingEdits.forEach(({name,dk,status})=>{
     const emp=empByName(name);
     tasks.push(
-      fetch(gsConfig.url,{method:'POST',body:JSON.stringify({
+      fetch(gsPostUrl(),{method:'POST',body:JSON.stringify({
         action:'updateCell',empId:emp.id||'',memberName:name,dateLabel:dk,
         colIndex:workdays.findIndex(d=>dateKey(d)===dk),rowIndex:EMPLOYEES.findIndex(e=>e.name===name),
         newState:status,silent:true,updateBy:AUTH?.isAdmin?(AUTH.name||'Admin'):'Employee'
@@ -3048,7 +3052,7 @@ async function saveLocal(){
         endDate:$('endDate')?.value||'',
         updateBy:AUTH?.name||'Admin'
       };
-      await fetch(gsConfig.url,{method:'POST',body:JSON.stringify(payload),mode:'no-cors'});
+      await fetch(gsPostUrl(),{method:'POST',body:JSON.stringify(payload),mode:'no-cors'});
       setSyncStatus('✓ บันทึก Google แล้ว','ok');
       setTimeout(()=>setSyncStatus('✓ Online','ok'),2000);
       toast('บันทึกใน Google Sheet แล้ว ✓');
@@ -3082,13 +3086,22 @@ async function loadLocal(){
 // ════════════════════════════════════════════════════════════
 function gsUrlBase(){ return (gsConfig.url || $('gsUrl')?.value || DEFAULT_GS_URL || '').trim(); }
 function isOnlineMode(){ return !!gsUrlBase(); }
+// เศษ query string ของกุญแจ Worker (ไม่มี & หรือ ? นำหน้า) ใช้ต่อท้าย URL เอง
+function gsKeyParam(){ return WORKER_APP_KEY?('k='+encodeURIComponent(WORKER_APP_KEY)):''; }
+// URL สำหรับยิง POST (เขียนข้อมูล) — แนบกุญแจกัน Worker ถูกเรียกตรงๆ นอกแอป
+// หมายเหตุ: เป็นแค่ตัวกรองชั้นแรก ไม่ใช่ auth ที่สมบูรณ์ (ดูคอมเมนต์ WORKER_APP_KEY)
+function gsPostUrl(){
+  const b=gsUrlBase(); const kp=gsKeyParam();
+  if(!b || !kp) return b;
+  return b+(b.includes('?')?'&':'?')+kp;
+}
 
 function jsonpGet(action, params={}){
   const base=gsUrlBase();
   if(!base) return Promise.reject(new Error('ยังไม่ได้ใส่ Google Apps Script URL'));
   return new Promise((resolve,reject)=>{
     const cb='__tbs_cb_'+Date.now()+'_'+Math.floor(Math.random()*100000);
-    const q=new URLSearchParams({...params, action, callback:cb, t:Date.now()});
+    const q=new URLSearchParams({...params, action, k:WORKER_APP_KEY, callback:cb, t:Date.now()});
     const s=document.createElement('script');
     const timer=setTimeout(()=>{ cleanup(); reject(new Error('โหลดข้อมูลจาก Google ไม่สำเร็จ')); },15000);
     function cleanup(){ clearTimeout(timer); try{delete window[cb];}catch(e){window[cb]=undefined;} if(s.parentNode)s.parentNode.removeChild(s); }
@@ -3250,7 +3263,7 @@ async function postGoogleFirst(payload){
   if(!gsUrlBase()) return false;
   try{
     setSyncStatus('↑ Saving Google...','loading');
-    await fetch(gsUrlBase(),{method:'POST',body:JSON.stringify(payload),mode:'no-cors'});
+    await fetch(gsPostUrl(),{method:'POST',body:JSON.stringify(payload),mode:'no-cors'});
     setSyncStatus('✓ Saved Google','ok');
     setTimeout(()=>setSyncStatus('✓ Online','ok'),1500);
     return true;
@@ -3323,7 +3336,7 @@ async function testGsConnection(){
   gsConfig.url=url;
   $('gsConnResult').textContent='กำลังทดสอบ...';
   try{
-    await fetch(url+'?action=ping',{method:'GET',mode:'no-cors'});
+    await fetch(url+'?action=ping&'+gsKeyParam(),{method:'GET',mode:'no-cors'});
     $('gsConnResult').innerHTML='<span style="color:var(--green)">✓ เชื่อมต่อสำเร็จ — กด Init & Sync ได้เลย</span>';
     saveGsConfig();
   }catch(e){$('gsConnResult').innerHTML=`<span style="color:var(--red)">✗ ${e.message}</span>`;}
@@ -3338,7 +3351,7 @@ async function initGSheet(){
   const allDays=days.map(d=>({date:dateKey(d),label:thShort(d),dayName:TH_DAYS[d.getDay()],type:isWeekend(d)?'we':isPub(d)?'pub':'work'}));
   const payload={action:'initSheet',members:members.map(m=>({id:m.id,name:m.name,role:m.role,company:m.company,group:m.group,division:m.division,section:m.section,dept:m.dept,active:m.active!==false})),days:allDays,period:($('periodName')||{value:''}).value};
   try{
-    await fetch(url,{method:'POST',body:JSON.stringify(payload),mode:'no-cors'});
+    await fetch(gsPostUrl(),{method:'POST',body:JSON.stringify(payload),mode:'no-cors'});
     gsConfig.initialized=true;saveGsConfig();setGsConnected(true);
     setSyncStatus('✓ Init OK','ok');
     addSyncLog('Init Sheet สำเร็จ','ok');
@@ -3354,7 +3367,7 @@ async function forceSyncAll(){
   const workdays=days.filter(d=>!isOff(d));
   const rows=members.map(m=>({id:m.id,name:m.name,role:m.role,company:m.company,group:m.group,division:m.division,section:m.section,dept:m.dept,states:workdays.map(d=>attendData[m.name]?.[dateKey(d)]??currentDef)}));
   try{
-    await fetch(gsConfig.url,{method:'POST',body:JSON.stringify({action:'syncAll',rows,workdayKeys:workdays.map(d=>dateKey(d)),dedupe:true}),mode:'no-cors'});
+    await fetch(gsPostUrl(),{method:'POST',body:JSON.stringify({action:'syncAll',rows,workdayKeys:workdays.map(d=>dateKey(d)),dedupe:true}),mode:'no-cors'});
     setSyncStatus(`✓ Synced ${members.length} คน`,'ok');
     addSyncLog(`Sync ${members.length}×${workdays.length} สำเร็จ`,'ok');
     setTimeout(()=>setSyncStatus('','idle'),3000);
@@ -3364,7 +3377,7 @@ async function forceSyncAll(){
 async function syncCell({name,label,ri,di,state,totalW,totalM,silent}){
   setSyncStatus('↑','loading');
   try{
-    await fetch(gsConfig.url,{method:'POST',body:JSON.stringify({action:'updateCell',empId:empByName(name).id||'',memberName:name,dateLabel:label,colIndex:di,rowIndex:ri,newState:state,totalMembers:totalM,silent:silent||false,updateBy:AUTH.isAdmin?(AUTH.name||'Admin'):'Employee'}),mode:'no-cors'});
+    await fetch(gsPostUrl(),{method:'POST',body:JSON.stringify({action:'updateCell',empId:empByName(name).id||'',memberName:name,dateLabel:label,colIndex:di,rowIndex:ri,newState:state,totalMembers:totalM,silent:silent||false,updateBy:AUTH.isAdmin?(AUTH.name||'Admin'):'Employee'}),mode:'no-cors'});
     setSyncStatus('✓','ok');addSyncLog(`${name} ${label} → ${state}`,'ok');
     setTimeout(()=>setSyncStatus('','idle'),2000);
   }catch(e){setSyncStatus('✗','idle');addSyncLog(`Sync cell ล้มเหลว`,'err');}
@@ -3398,7 +3411,7 @@ async function createExecutiveReport(){
     rows
   };
   try{
-    await fetch(gsConfig.url,{method:'POST',body:JSON.stringify(payload),mode:'no-cors'});
+    await fetch(gsPostUrl(),{method:'POST',body:JSON.stringify(payload),mode:'no-cors'});
     setSyncStatus('✓ Report','ok');
     toast('สร้าง Report Online แล้ว เปิดดูใน Google Sheet');
     setTimeout(()=>setSyncStatus('', 'idle'),3000);
@@ -4219,7 +4232,7 @@ async function sendReportEmail(){
   const send=(b64,fname)=>{
     const payload={ action:'notify', lineEnabled:false, emailEnabled:true, emailTo:to, emailCc:cc, emailSubject:subject, emailBody:buildReportEmailBody(!!b64) };
     if(b64){ payload.attachXlsxBase64=b64; payload.attachXlsxName=fname; }
-    fetch(url,{method:'POST',body:JSON.stringify(payload),mode:'no-cors'})
+    fetch(gsPostUrl(),{method:'POST',body:JSON.stringify(payload),mode:'no-cors'})
       .then(()=>{ showRepEmail('✓ ส่งอีเมลแล้ว → '+to+(b64?' (แนบ Excel)':''),'#064E3B'); toast('📨 ส่งสรุปทางอีเมลแล้ว'); })
       .catch(e=>showRepEmail('✗ ส่งไม่สำเร็จ: '+e.message,'var(--red-m)'));
   };
@@ -4565,7 +4578,7 @@ async function testNotifyGs(){
   if(!url){ showNotifyResult('กรุณาใส่ URL','var(--amber-m)'); return; }
   showNotifyResult('กำลังทดสอบ...','var(--g5)');
   try{
-    await fetch(url+'?action=ping', {mode:'no-cors'});
+    await fetch(url+'?action=ping&'+gsKeyParam(), {mode:'no-cors'});
     showNotifyResult('✓ เชื่อมต่อสำเร็จ','#064E3B');
   }catch(e){
     showNotifyResult('✗ เชื่อมต่อไม่ได้','var(--red-m)');
