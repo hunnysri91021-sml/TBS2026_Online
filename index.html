@@ -1888,23 +1888,26 @@ async function saveESSData(){
   const notifyUrl=cfg2.gsUrl||gsConfig.url||DEFAULT_GS_URL||'';
   if(notifyUrl && currentESSEmp){
     const emp=currentESSEmp;
-    const sumMsg=buildSaveNotifyMsg(emp);
-    // ช่องที่เปลี่ยนจริงในรอบนี้ (เทียบกับ snapshot ก่อนเริ่มแก้) — ใช้ไฮไลต์ในไฟล์ Excel
+    // ช่องที่เปลี่ยนจริงในรอบนี้ (เทียบกับ snapshot ก่อนเริ่มแก้) — ใช้แสดงวันที่ในข้อความแจ้งเตือน
+    // และไฮไลต์ในไฟล์ Excel (ต้องคำนวณก่อนสร้างข้อความ)
     const modEntries=days.filter(d=>!isOff(d)).map(d=>{
       const k=dateKey(d);
       const newSt=attendData[emp.name]?.[k]||'';
       const oldSt=essOrigAttend?.[k]||'';
       return {name:emp.name,dk:k,status:newSt,old:oldSt};
     }).filter(e=>e.old!==e.status);
+    // LINE แสดงวันที่ที่เปลี่ยน (เดิม → ใหม่) · Email ใช้ข้อความสรุปแบบเดิม (รายละเอียดรายวันอยู่ใน Excel แนบ)
+    const lineMsg=buildSaveNotifyMsg(emp,modEntries);
+    const emailMsg=buildSaveNotifyMsg(emp);
     const send=(b64,fname)=>{
       fetch(notifyUrl,{method:'POST',body:JSON.stringify({
         action:'notify',
         lineEnabled:cfg2.lineEnabled,
         lineToId:cfg2.lineToId||'',
-        lineMessage:sumMsg,
+        lineMessage:lineMsg,
         emailEnabled:cfg2.emailEnabled,emailTo:cfg2.emailTo||'',emailCc:cfg2.emailCc||'',
         emailSubject:(cfg2.emailSubject||'[TBS 2026] แจ้งเตือนการเปลี่ยนแปลงสถานะ')+' — '+emp.name,
-        emailBody:sumMsg,
+        emailBody:emailMsg,
         ...(b64?{attachXlsxBase64:b64,attachXlsxName:fname}:{}),
       }),mode:'no-cors'}).catch(()=>{});
     };
@@ -1924,18 +1927,27 @@ async function saveESSData(){
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
-function buildSaveNotifyMsg(emp){
+// entries: ช่องที่เปลี่ยนจริงรอบนี้ [{dk,status,old}] — แสดงวันที่เปลี่ยนแปลง (เดิม → ใหม่)
+// รูปแบบเดียวกับข้อความแจ้งเตือนตอน Admin กด Save (buildAdminSaveNotifyMsg)
+function buildSaveNotifyMsg(emp,entries){
   const workdays=days.filter(d=>!isOff(d));
   const on=workdays.filter(d=>attendData[emp.name]?.[dateKey(d)]==='On').length;
   const off=workdays.filter(d=>attendData[emp.name]?.[dateKey(d)]==='Off').length;
   const la=workdays.filter(d=>['พร.','กิจ','ป่วย'].includes(attendData[emp.name]?.[dateKey(d)])).length;
   const pct=workdays.length?Math.round(on/workdays.length*100):0;
   const now=new Date();
+  const changeLines=(entries||[])
+    .slice().sort((a,b)=>a.dk.localeCompare(b.dk))
+    .map(e=>`   - ${dkToShortThai(e.dk)}: ${e.old||'ว่าง'} → ${e.status||'ว่าง'}`)
+    .join('\n');
+  const changeBlock=changeLines
+    ? `วันที่เปลี่ยนแปลง (เดิม → ใหม่):\n${changeLines}\n──────────────────\n`
+    : '';
   return `[TBS 2026] 📋 บันทึกสถานะแล้ว
 พนักงาน: ${emp.name} (${emp.id})
 แผนก: ${emp.section||''} · ${emp.group||''}
 ──────────────────
-✓ มาทำงาน (On): ${on} วัน
+${changeBlock}✓ มาทำงาน (On): ${on} วัน
 ✕ หยุด 75% (Off): ${off} วัน
 📋 ลารวม: ${la} วัน
 📊 % มาทำงาน: ${pct}%
