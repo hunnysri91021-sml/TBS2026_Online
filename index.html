@@ -2659,8 +2659,8 @@ function buildAdminSelectionPanel(){
           <button class="btn btn-primary btn-sm" onclick="selectAllFilteredEmployees()">เลือกทั้งหมดที่แสดง</button>
           <button class="btn btn-ghost btn-sm" onclick="clearFilteredEmployees()">ล้างเฉพาะที่แสดง</button>
           <button class="btn btn-danger btn-sm" onclick="resetSelectedEmployeesToOn()">↺ Reset On คนที่เลือก</button>
-          <button class="btn btn-sm" style="background:#7F1D1D;color:#fff" onclick="lockSelectedEmployeesEss()">🔒 ล็อกไม่ให้แก้ไขเอง (คนที่เลือก)</button>
-          <button class="btn btn-sm" style="background:#059669;color:#fff" onclick="unlockSelectedEmployeesEss()">🔓 ปลดล็อก (คนที่เลือก)</button>
+          ${isSystemAdmin()?`<button class="btn btn-sm" style="background:#7F1D1D;color:#fff" onclick="lockSelectedEmployeesEss()">🔒 ล็อกไม่ให้แก้ไขเอง (คนที่เลือก)</button>
+          <button class="btn btn-sm" style="background:#059669;color:#fff" onclick="unlockSelectedEmployeesEss()">🔓 ปลดล็อก (คนที่เลือก)</button>`:''}
           <button class="btn btn-success btn-sm" onclick="switchAdminTab('matrix')">ไปตารางรายวัน →</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;max-height:430px;overflow-y:auto;padding-right:4px">
@@ -2940,6 +2940,7 @@ async function setEssLockOnServer(names,locked){
 }
 
 async function lockSelectedEmployeesEss(){
+  if(!isSystemAdmin()){toast('ล็อก/ปลดล็อก ESS ใช้ได้เฉพาะ System Admin เท่านั้น');return;}
   const names=getResetTargetNames();
   if(!names.length){toast('กรุณาติ๊กเลือกพนักงานก่อน');return;}
   if(!confirm(`ยืนยันล็อกพนักงาน ${names.length} คน ไม่ให้แก้ไขสถานะวันทำงานเอง (ESS)?`)) return;
@@ -2947,6 +2948,7 @@ async function lockSelectedEmployeesEss(){
 }
 
 async function unlockSelectedEmployeesEss(){
+  if(!isSystemAdmin()){toast('ล็อก/ปลดล็อก ESS ใช้ได้เฉพาะ System Admin เท่านั้น');return;}
   const names=getResetTargetNames();
   if(!names.length){toast('กรุณาติ๊กเลือกพนักงานก่อน');return;}
   if(!confirm(`ยืนยันปลดล็อกพนักงาน ${names.length} คน ให้แก้ไขสถานะวันทำงานเองได้?`)) return;
