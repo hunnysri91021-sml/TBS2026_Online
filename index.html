@@ -2602,6 +2602,10 @@ function buildAdminWorkflowSteps(active){
 }
 function buildAdminSelectionPanel(){
   const wrap=$('unitContent'); if(!wrap) return;
+  const activeEl=document.activeElement;
+  const focusId=(activeEl&&wrap.contains(activeEl)&&activeEl.id)?activeEl.id:null;
+  const focusSelStart=focusId&&typeof activeEl.selectionStart==='number'?activeEl.selectionStart:null;
+  const focusSelEnd=focusId&&typeof activeEl.selectionEnd==='number'?activeEl.selectionEnd:null;
   if(!isSystemAdmin()) adminSelectUnit=AUTH.unit;
   const allMembers=getEmployeesByUnit(adminSelectUnit||'ALL');
   const members=getSelectFilteredMembers();
@@ -2677,6 +2681,15 @@ function buildAdminSelectionPanel(){
       </div>
     </div>
   `;
+  if(focusId){
+    const toFocus=$(focusId);
+    if(toFocus){
+      toFocus.focus();
+      if(focusSelStart!==null&&typeof toFocus.setSelectionRange==='function'){
+        toFocus.setSelectionRange(focusSelStart,focusSelEnd);
+      }
+    }
+  }
 }
 function toggleSelectedEmployeeCard(name,forceValue){
   if(!assertCanEditEmpName(name)) return;
