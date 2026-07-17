@@ -3142,10 +3142,17 @@ async function deleteManagedEmployee(){
 //  SAVE / LOAD
 // ════════════════════════════════════════════════════════════
 
+// กันกดปุ่ม Save ซ้ำระหว่างกำลังบันทึกอยู่ — pendingEdits ยังไม่ถูกล้างจนกว่า Google
+// จะยืนยันกลับมา (อย่างน้อย ~1.2 วินาที) ถ้ากดซ้ำในช่วงนั้นจะส่งรายการเดิมซ้ำ ทำให้ข้อความ
+// แจ้งเตือน LINE/Email ออกซ้ำกันทุกตัวอักษร
+let _isSavingAndReloading=false;
 // บันทึกเฉพาะช่องที่แก้ (pending) ขึ้น Google ทีละช่อง แล้วดึงข้อมูลล่าสุดมาแสดง
 // ปลอดภัยเมื่อหลายคนแก้พร้อมกัน (ไม่เขียนทับช่องของคนอื่น) และยืนยันว่าบันทึกจริง
 async function saveAndReload(){
+  if(_isSavingAndReloading){ toast('กำลังบันทึกอยู่ กรุณารอสักครู่...'); return; }
   if(!gsConfig.url){ toast('⚠️ ยังไม่ได้ตั้งค่า Google Sheet URL'); return; }
+  _isSavingAndReloading=true;
+  try{
   // เก็บช่องที่แก้ไว้ (พร้อมค่าเดิม/ใหม่) ก่อนส่งจริง ไว้ใช้สรุปแจ้งเตือนครั้งเดียวตอนกด Save
   // (ระหว่างวนคลิกเปลี่ยนสถานะ/bulk แต่ละครั้งจะ silent:true ไม่แจ้งเตือนทุกคลิกแล้ว)
   const changedEntries=pendingEdits.map(e=>({...e}));
@@ -3176,6 +3183,7 @@ async function saveAndReload(){
     setSyncStatus('↻ กำลังซิงค์...','loading');
     setTimeout(async()=>{ await loadFromGoogleDb(true); setSyncStatus(pendingEdits.length?'↻ ซิงค์...':'✓ Online', pendingEdits.length?'loading':'ok'); }, 2500);
   }
+  }finally{ _isSavingAndReloading=false; }
 }
 
 async function saveLocal(){
