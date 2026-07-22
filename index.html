@@ -4096,7 +4096,7 @@ function exportTimeAttendanceReport(taData,members){
     const r=ri+2;
     const m=st.m;
     const rowBase=[m.name,m.id,m.role||'',m.group||'',m.section||'',m.division||'',m.dept||'',m.company||''];
-    rowBase.forEach((v,ci)=>{ ws1[XLSX.utils.encode_cell({r,c:ci})]=cell(v,{fgColor:{rgb:ri%2===0?'FFFFFF':'F9FAFB'}},{sz:10},'left'); });
+    rowBase.forEach((v,ci)=>{ ws1[XLSX.utils.encode_cell({r,c:ci})]=cell(v,{rgb:ri%2===0?'FFFFFF':'F9FAFB'},{sz:10},'left'); });
     const notFound=!st.ta;
     const rest=[
       st.plannedOn, st.ta?st.actualPresent:'ไม่พบในไฟล์', st.lateCount, st.lateMinTotal,
@@ -4105,10 +4105,10 @@ function exportTimeAttendanceReport(taData,members){
     rest.forEach((v,i)=>{
       const ci=nFixed+i;
       const flagBad=(i===4&&v>0)||(i===2&&v>0); // ขาดงานไม่ตรงแผน หรือ มาสาย
-      ws1[XLSX.utils.encode_cell({r,c:ci})]=cell(v,flagBad?FILL.warn:{fgColor:{rgb:ri%2===0?'FFFFFF':'F9FAFB'}},{bold:flagBad,sz:10},'center');
+      ws1[XLSX.utils.encode_cell({r,c:ci})]=cell(v,flagBad?FILL.warn:{rgb:ri%2===0?'FFFFFF':'F9FAFB'},{bold:flagBad,sz:10},'center');
     });
-    ws1[XLSX.utils.encode_cell({r,c:nFixed+9})]=cell(offDatesLabel(workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='Off')),{fgColor:{rgb:ri%2===0?'FFFFFF':'F9FAFB'}},{sz:9},'left');
-    ws1[XLSX.utils.encode_cell({r,c:nFixed+10})]=cell(offDatesLabel(st.offButWorked),st.offButWorked.length?FILL.warn:{fgColor:{rgb:ri%2===0?'FFFFFF':'F9FAFB'}},{sz:9,bold:!!st.offButWorked.length},'left');
+    ws1[XLSX.utils.encode_cell({r,c:nFixed+9})]=cell(offDatesLabel(workdays.filter(d=>attendData[m.name]?.[dateKey(d)]==='Off')),{rgb:ri%2===0?'FFFFFF':'F9FAFB'},{sz:9},'left');
+    ws1[XLSX.utils.encode_cell({r,c:nFixed+10})]=cell(offDatesLabel(st.offButWorked),st.offButWorked.length?FILL.warn:{rgb:ri%2===0?'FFFFFF':'F9FAFB'},{sz:9,bold:!!st.offButWorked.length},'left');
     if(notFound){
       ws1[XLSX.utils.encode_cell({r,c:nFixed})]=cell(st.plannedOn,FILL.bad,{sz:10},'center');
     }
@@ -4131,7 +4131,7 @@ function exportTimeAttendanceReport(taData,members){
     const r=ri+2;
     const m=st.m;
     const rowBase=[m.name,m.id,m.role||'',m.group||'',m.section||'',m.division||'',m.dept||'',m.company||''];
-    rowBase.forEach((v,ci)=>{ ws2[XLSX.utils.encode_cell({r,c:ci})]=cell(v,{fgColor:{rgb:'FFFFFF'}},{sz:10},'left'); });
+    rowBase.forEach((v,ci)=>{ ws2[XLSX.utils.encode_cell({r,c:ci})]=cell(v,{rgb:'FFFFFF'},{sz:10},'left'); });
     st.days.forEach(({dk,plan,rec},di)=>{
       let label,mismatch=false;
       if(rec.kind==='present'){
