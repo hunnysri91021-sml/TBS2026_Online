@@ -661,7 +661,7 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
         <input type="file" id="statusTemplateFile" accept=".xlsx,.xls" style="display:none" onchange="handleStatusTemplateUpload(event)">
         <button id="btnMatrixSave" class="btn btn-ghost btn-sm" onclick="saveAndReload()" title="บันทึกการเปลี่ยนแปลงทั้งหมดและซิงก์ขึ้น Google Sheets — ต้องกดทุกครั้งหลังแก้ไข">💾 Save</button>
         <button class="btn btn-ghost btn-sm" onclick="loadLocal()" title="โหลดข้อมูลล่าสุดจาก Google Sheets กลับมาแสดงในตาราง">📂 Load</button>
-        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('timeAttendanceFile').click()" title="อัปโหลดไฟล์ Time Attendance (จากเครื่องสแกน) เพื่อเปรียบเทียบเวลามาทำงานจริงกับแผน แล้วดาวน์โหลดสรุปสำหรับจ่ายเงินเดือน">⏱ Time Attendance</button>
+        <button id="btnMatrixTimeAttendance" class="btn btn-ghost btn-sm" onclick="document.getElementById('timeAttendanceFile').click()" title="อัปโหลดไฟล์ Time Attendance (จากเครื่องสแกน) เพื่อเปรียบเทียบเวลามาทำงานจริงกับแผน แล้วดาวน์โหลดสรุปสำหรับจ่ายเงินเดือน">⏱ Time Attendance</button>
         <input type="file" id="timeAttendanceFile" accept=".xls,.xlsx,.html,.htm" style="display:none" onchange="handleTimeAttendanceUpload(event)">
       </div>
     </div>
@@ -1485,6 +1485,7 @@ function closeModal(id){const m=$(id);if(m)m.classList.remove('open');setTimeout
 //  PERIOD SETUP
 // ════════════════════════════════════════════════════════════
 function applyPeriod(){
+  if(!assertAdminCanEdit()) return;
   const s=$('startDate').value;
   const e=$('endDate').value;
   if(!s||!e){toast('กรุณาระบุวันที่');return;}
@@ -1691,7 +1692,7 @@ function gotoAdmin(){
 
   // Admin แบบดูอย่างเดียว (เช่น KTG) — ซ่อนปุ่มที่แก้ไข/บันทึกข้อมูลในตารางรายวันทั้งหมด
   const readOnly=isReadOnlyAdmin();
-  ['btnMatrixDefaultOn','btnMatrixResetOn','btnMatrixUploadTpl','btnMatrixSave'].forEach(id=>{
+  ['btnMatrixDefaultOn','btnMatrixResetOn','btnMatrixUploadTpl','btnMatrixSave','btnMatrixTimeAttendance'].forEach(id=>{
     const el=$(id); if(el) el.style.display=readOnly?'none':'';
   });
 
@@ -4056,6 +4057,7 @@ function handleTimeAttendanceUpload(evt){
   const file=evt.target.files && evt.target.files[0];
   evt.target.value='';
   if(!file) return;
+  if(!assertAdminCanEdit()) return;
   if(!days.length){toast('กรุณาสร้างตารางก่อน');return;}
   const members=getAllowedEmployees().filter(e=>selectedEmp.has(e.name));
   if(!members.length){toast('กรุณาเลือกพนักงานในขั้นตอน 2 ก่อน');return;}
