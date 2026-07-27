@@ -820,6 +820,7 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
           <div class="field"><label>Operation – PDI (เฉพาะแผนก)</label><input type="text" id="pinOPS_PDI" placeholder="กรอกรหัสใหม่ (ไม่แสดงค่าเดิม)"></div>
           <div class="field"><label>Operation – Accessories (เฉพาะแผนก)</label><input type="text" id="pinOPS_ACCS" placeholder="กรอกรหัสใหม่ (ไม่แสดงค่าเดิม)"></div>
           <div class="field"><label>บัญชีและการเงิน Admin</label><input type="text" id="pinACC" placeholder="กรอกรหัสใหม่ (ไม่แสดงค่าเดิม)"></div>
+          <div class="field"><label>Admin บริษัท KTG (เฉพาะบริษัท)</label><input type="text" id="pinKTG" placeholder="กรอกรหัสใหม่ (ไม่แสดงค่าเดิม)"></div>
           <div class="field"><label>System Admin</label><input type="text" id="pinADM" placeholder="กรอกรหัส System Admin ใหม่"></div>
         </div>
         <button class="btn btn-primary" style="margin-top:12px" onclick="savePins()">💾 บันทึกรหัสลง Google</button>
@@ -1188,14 +1189,17 @@ const UNIT_SECTIONS={
 };
 // ป้ายชื่อหน่วยงาน (ใช้ร่วมกันทุกที่ แทนการ hardcode ซ้ำ)
 const UNIT_LABELS={ALL:'ทั้งหมด',HR:'HR&GA',OPS:'Operation',ACC:'บัญชีและการเงิน',ADM:'System Admin',
-  OPS_YARD:'Operation – YARD',OPS_PDI:'Operation – PDI',OPS_ACCS:'Operation – Accessories'};
+  OPS_YARD:'Operation – YARD',OPS_PDI:'Operation – PDI',OPS_ACCS:'Operation – Accessories',
+  KTG:'Admin บริษัท KTG'};
+// unit ที่จำกัดสิทธิ์ตาม "บริษัท" (emp.company) แทนที่จะจำกัดตามแผนก (section) แบบ UNIT_SECTIONS ด้านบน
+const COMPANY_UNITS={KTG:'KTG'};
 // ลำดับ unit สำหรับตั้ง/ตรวจรหัส (ADM ไว้ท้ายสุด) และตัวเลือกของ System Admin
-const ADMIN_UNITS=['HR','OPS','OPS_YARD','OPS_PDI','OPS_ACCS','ACC','ADM'];
+const ADMIN_UNITS=['HR','OPS','OPS_YARD','OPS_PDI','OPS_ACCS','ACC','KTG','ADM'];
 // PDPA: ห้าม hardcode รหัส PIN จริงไว้ในซอร์สโค้ด (public repo) — รหัสจริงต้องตั้งผ่านหน้า
 // System Admin → "บันทึกรหัสลง Google" เท่านั้น (เก็บฝั่ง Google Sheet ผ่าน Code.gs ซึ่งไม่ขึ้น GitHub)
 // ค่าว่างที่นี่เป็นแค่โครงสร้าง fallback สำหรับตอนเชื่อมต่อ Google ไม่ได้ชั่วคราวเท่านั้น
 const ADMIN_PIN_DEFAULTS={HR:'',OPS:'',ACC:'',ADM:'',
-  OPS_YARD:'',OPS_PDI:'',OPS_ACCS:''};
+  OPS_YARD:'',OPS_PDI:'',OPS_ACCS:'',KTG:''};
 
 // ════ RUNTIME STATE ════
 const SAVE_KEY='moo75_data_v1';
@@ -1293,12 +1297,14 @@ function isSystemAdmin(){ return AUTH.unit==='ADM'; }
 function isEmpAllowed(emp){
   if(!AUTH.isAdmin) return false;
   if(isSystemAdmin()) return true;
+  if(COMPANY_UNITS[AUTH.unit]) return !!emp && (emp.company||'')===COMPANY_UNITS[AUTH.unit];
   const sects=getAdminSections();
   return !!emp && sects.includes(emp.section||'');
 }
 function getAllowedEmployees(){
   if(!AUTH.isAdmin) return [];
   if(isSystemAdmin()) return EMPLOYEES.slice();
+  if(COMPANY_UNITS[AUTH.unit]) return EMPLOYEES.filter(e=>(e.company||'')===COMPANY_UNITS[AUTH.unit]);
   const sects=getAdminSections();
   return EMPLOYEES.filter(e=>sects.includes(e.section||''));
 }
@@ -2542,6 +2548,7 @@ function unitLabel(unit){
 }
 function getEmployeesByUnit(unit){
   if(unit==='ALL') return getAllowedEmployees();
+  if(COMPANY_UNITS[unit]) return getAllowedEmployees().filter(e=>(e.company||'')===COMPANY_UNITS[unit]);
   const sects=UNIT_SECTIONS[unit]||[];
   return getAllowedEmployees().filter(e=>sects.includes(e.section||''));
 }
