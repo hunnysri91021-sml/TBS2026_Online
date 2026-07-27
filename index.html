@@ -653,13 +653,13 @@ table.matrix .m-pill:hover{filter:brightness(.88);transform:scale(1.08)}
       <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">
         <span id="matrixSyncStatus" class="sync-indicator sync-idle"></span>
         <button class="btn btn-ghost btn-sm" onclick="togglePanel('gsPanel')" title="เชื่อมต่อ/ตั้งค่าการซิงก์ข้อมูลกับ Google Sheets">⬡ Google Sheets</button>
-        <button class="btn btn-primary btn-sm" onclick="setAdminDefaultOn()" title="ตั้งสถานะเริ่มต้นของทุกวันในช่วงนี้เป็น On">Default = On</button>
-        <button class="btn btn-danger btn-sm" onclick="resetSelectedEmployeesToOn()" title="รีเซ็ตพนักงานที่ติ๊กเลือกไว้ในตารางให้กลับเป็น On ทุกวันทำงาน">↺ Reset On (คนที่เลือก)</button>
+        <button id="btnMatrixDefaultOn" class="btn btn-primary btn-sm" onclick="setAdminDefaultOn()" title="ตั้งสถานะเริ่มต้นของทุกวันในช่วงนี้เป็น On">Default = On</button>
+        <button id="btnMatrixResetOn" class="btn btn-danger btn-sm" onclick="resetSelectedEmployeesToOn()" title="รีเซ็ตพนักงานที่ติ๊กเลือกไว้ในตารางให้กลับเป็น On ทุกวันทำงาน">↺ Reset On (คนที่เลือก)</button>
         <button class="btn btn-ghost btn-sm" onclick="exportExcel()" title="ดาวน์โหลดรายงานสรุปการมาทำงานเป็น Excel (ดูอย่างเดียว ไม่ใช้อัปโหลดกลับ)">↓ Excel</button>
         <button class="btn btn-ghost btn-sm" onclick="downloadStatusTemplate()" title="ดาวน์โหลดไฟล์ Excel สำหรับกรอกปรับสถานะพนักงานที่เลือกไว้เป็นชุด แล้วอัปโหลดกลับด้วยปุ่ม Upload Template">📥 Template ปรับสถานะ</button>
-        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('statusTemplateFile').click()" title="เลือกไฟล์ Template ที่กรอกสถานะแล้ว เพื่อนำเข้ามาปรับสถานะหลายคน/หลายวันพร้อมกัน">📤 Upload Template</button>
+        <button id="btnMatrixUploadTpl" class="btn btn-ghost btn-sm" onclick="document.getElementById('statusTemplateFile').click()" title="เลือกไฟล์ Template ที่กรอกสถานะแล้ว เพื่อนำเข้ามาปรับสถานะหลายคน/หลายวันพร้อมกัน">📤 Upload Template</button>
         <input type="file" id="statusTemplateFile" accept=".xlsx,.xls" style="display:none" onchange="handleStatusTemplateUpload(event)">
-        <button class="btn btn-ghost btn-sm" onclick="saveAndReload()" title="บันทึกการเปลี่ยนแปลงทั้งหมดและซิงก์ขึ้น Google Sheets — ต้องกดทุกครั้งหลังแก้ไข">💾 Save</button>
+        <button id="btnMatrixSave" class="btn btn-ghost btn-sm" onclick="saveAndReload()" title="บันทึกการเปลี่ยนแปลงทั้งหมดและซิงก์ขึ้น Google Sheets — ต้องกดทุกครั้งหลังแก้ไข">💾 Save</button>
         <button class="btn btn-ghost btn-sm" onclick="loadLocal()" title="โหลดข้อมูลล่าสุดจาก Google Sheets กลับมาแสดงในตาราง">📂 Load</button>
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('timeAttendanceFile').click()" title="อัปโหลดไฟล์ Time Attendance (จากเครื่องสแกน) เพื่อเปรียบเทียบเวลามาทำงานจริงกับแผน แล้วดาวน์โหลดสรุปสำหรับจ่ายเงินเดือน">⏱ Time Attendance</button>
         <input type="file" id="timeAttendanceFile" accept=".xls,.xlsx,.html,.htm" style="display:none" onchange="handleTimeAttendanceUpload(event)">
@@ -1294,6 +1294,14 @@ function getAdminSections(unit=AUTH.unit){
   return UNIT_SECTIONS[unit] || [];
 }
 function isSystemAdmin(){ return AUTH.unit==='ADM'; }
+// unit ที่ดู/ดาวน์โหลดข้อมูลได้เท่านั้น ห้ามแก้ไข/บันทึกการเปลี่ยนแปลงใดๆ ทั้งสิ้น
+const READONLY_UNITS={KTG:true};
+function isReadOnlyAdmin(){ return !!READONLY_UNITS[AUTH.unit]; }
+// เรียกที่จุดเริ่มต้นของทุกการกระทำที่แก้ไข/บันทึกข้อมูล — คืน false + toast ถ้าเป็น Admin แบบดูอย่างเดียว
+function assertAdminCanEdit(){
+  if(isReadOnlyAdmin()){ toast('บัญชีนี้มีสิทธิ์ดูและดาวน์โหลดข้อมูลเท่านั้น ไม่สามารถแก้ไขข้อมูลได้'); return false; }
+  return true;
+}
 function isEmpAllowed(emp){
   if(!AUTH.isAdmin) return false;
   if(isSystemAdmin()) return true;
@@ -1375,6 +1383,9 @@ function loadPendingEdits(){
   }catch(e){ pendingEdits=[]; }
 }
 function markDirty(name,dk,status,oldStatus){
+  // Admin แบบดูอย่างเดียว (เช่น KTG) ห้ามคิวการเปลี่ยนแปลงใดๆ ไม่ว่าจะเข้ามาจากช่องทางไหน —
+  // กันจุดสุดท้ายไว้ตรงนี้ เผื่อ UI จุดใดลืมเช็คสิทธิ์ก่อนเรียก
+  if(isReadOnlyAdmin()) return;
   // เก็บ old ไว้เฉพาะตอนสร้างรายการใหม่ (แก้ครั้งแรกของช่องนี้ในรอบที่ยังไม่ยืนยัน)
   // เพื่อใช้เทียบ เดิม/ใหม่ ตอนสรุปแจ้งเตือน ถึงจะวนคลิกเปลี่ยนหลายรอบ ค่า old ก็ยังอ้างอิงจากค่าที่ยืนยันล่าสุดเสมอ
   const e=pendingEdits.find(x=>x.name===name&&x.dk===dk);
@@ -1677,6 +1688,13 @@ function gotoAdmin(){
   $('atConfig').style.display=isSysAdmin?'inline-block':'none';
   if(!isSysAdmin) adminSelectUnit=AUTH.unit;
   normalizeAdminSelection();
+
+  // Admin แบบดูอย่างเดียว (เช่น KTG) — ซ่อนปุ่มที่แก้ไข/บันทึกข้อมูลในตารางรายวันทั้งหมด
+  const readOnly=isReadOnlyAdmin();
+  ['btnMatrixDefaultOn','btnMatrixResetOn','btnMatrixUploadTpl','btnMatrixSave'].forEach(id=>{
+    const el=$(id); if(el) el.style.display=readOnly?'none':'';
+  });
+
   switchAdminTab('overview');
 }
 
@@ -2360,7 +2378,7 @@ function buildMatrix(headId,bodyId,rangeDays,members,editable){
   // Header
   const htr=document.createElement('tr');
   // checkbox col (editable only)
-  if(editable){const th=document.createElement('th');th.style.cssText='width:32px;padding:4px';const ca=document.createElement('input');ca.type='checkbox';ca.title='เลือกทั้งหมด';ca.onchange=e=>{members.filter(m=>isEmpAllowed(m)).forEach(m=>e.target.checked?selectedRows.add(m.name):selectedRows.delete(m.name));buildMatrix(headId,bodyId,rangeDays,members,editable);renderBulkBar(rangeDays,members);};th.appendChild(ca);htr.appendChild(th);}
+  if(editable){const th=document.createElement('th');th.style.cssText='width:32px;padding:4px';const ca=document.createElement('input');ca.type='checkbox';ca.title='เลือกทั้งหมด';ca.onchange=e=>{if(!assertAdminCanEdit()){e.target.checked=false;return;} members.filter(m=>isEmpAllowed(m)).forEach(m=>e.target.checked?selectedRows.add(m.name):selectedRows.delete(m.name));buildMatrix(headId,bodyId,rangeDays,members,editable);renderBulkBar(rangeDays,members);};th.appendChild(ca);htr.appendChild(th);}
   const thN=document.createElement('th');thN.className='th-name';thN.textContent='พนักงาน';htr.appendChild(thN);
   rangeDays.forEach(d=>{
     const th=document.createElement('th');
@@ -2381,7 +2399,7 @@ function buildMatrix(headId,bodyId,rangeDays,members,editable){
     if(editable){
       const tdC=document.createElement('td');tdC.style='text-align:center;padding:0 4px';
       const chk=document.createElement('input');chk.type='checkbox';chk.checked=selectedRows.has(emp.name);chk.disabled=!isEmpAllowed(emp);chk.title=chk.disabled?'ไม่มีสิทธิ์เลือกพนักงานคนนี้':'เลือกพนักงาน';
-      chk.onchange=e=>{if(!assertCanEditEmpName(emp.name)){e.target.checked=false;return;} e.target.checked?selectedRows.add(emp.name):selectedRows.delete(emp.name);tr.classList.toggle('row-sel',e.target.checked);renderBulkBar(rangeDays,members);};
+      chk.onchange=e=>{if(!assertAdminCanEdit()||!assertCanEditEmpName(emp.name)){e.target.checked=false;return;} e.target.checked?selectedRows.add(emp.name):selectedRows.delete(emp.name);tr.classList.toggle('row-sel',e.target.checked);renderBulkBar(rangeDays,members);};
       tdC.appendChild(chk);tr.appendChild(tdC);
     }
     // name cell
@@ -2457,6 +2475,7 @@ function buildEditMatrix(){
 }
 
 function toggleCellAdmin(name,dk,ri,di,totalW,totalM,hid,bid,rangeDays,members){
+  if(!assertAdminCanEdit()) return;
   if(!assertCanEditEmpName(name)) return;
   const cur=attendData[name]?.[dk]??'';
   const ns=STATES[(STATES.indexOf(cur)+1)%STATES.length];
@@ -2472,6 +2491,7 @@ function toggleCellAdmin(name,dk,ri,di,totalW,totalM,hid,bid,rangeDays,members){
 // Context menu
 let _rmCtx=null;
 function showCtxMenu(e,name,dk,ri,di,totalW,totalM,hid,bid,rangeDays,members){
+  if(!assertAdminCanEdit()) return;
   if(!assertCanEditEmpName(name)) return;
   removeCtxMenu();
   const cur=attendData[name]?.[dk]??'';
@@ -2628,7 +2648,7 @@ function buildAdminSelectionPanel(){
     <div class="card" style="margin-bottom:14px">
       <div class="card-hdr">
         <div class="card-title">✅ เลือกพนักงานสำหรับแก้ไข</div>
-        <div style="font-size:11px;color:var(--g5)">${isSystemAdmin()?'System Admin เลือกได้ทุกฝ่าย':'Admin ฝ่ายนี้เลือกได้เฉพาะ '+unitLabel(AUTH.unit)}</div>
+        <div style="font-size:11px;color:var(--g5)">${isSystemAdmin()?'System Admin เลือกได้ทุกฝ่าย':'Admin ฝ่ายนี้เลือกได้เฉพาะ '+unitLabel(AUTH.unit)}${isReadOnlyAdmin()?' · 🔒 ดู/ดาวน์โหลดข้อมูลได้อย่างเดียว':''}</div>
       </div>
       <div class="card-body">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">
@@ -2665,7 +2685,7 @@ function buildAdminSelectionPanel(){
         <div class="action-row" style="margin-bottom:12px">
           <button class="btn btn-primary btn-sm" onclick="selectAllFilteredEmployees()">เลือกทั้งหมดที่แสดง</button>
           <button class="btn btn-ghost btn-sm" onclick="clearFilteredEmployees()">ล้างเฉพาะที่แสดง</button>
-          <button class="btn btn-danger btn-sm" onclick="resetSelectedEmployeesToOn()">↺ Reset On คนที่เลือก</button>
+          ${isReadOnlyAdmin()?'':'<button class="btn btn-danger btn-sm" onclick="resetSelectedEmployeesToOn()">↺ Reset On คนที่เลือก</button>'}
           ${isSystemAdmin()?`<button class="btn btn-sm" style="background:#7F1D1D;color:#fff" onclick="lockSelectedEmployeesEss()">🔒 ล็อกไม่ให้แก้ไขเอง (คนที่เลือก)</button>
           <button class="btn btn-sm" style="background:#059669;color:#fff" onclick="unlockSelectedEmployeesEss()">🔓 ปลดล็อก (คนที่เลือก)</button>`:''}
           <button class="btn btn-success btn-sm" onclick="switchAdminTab('matrix')">ไปตารางรายวัน →</button>
@@ -2885,6 +2905,7 @@ function refreshAdminViews(){
 }
 
 function setAdminDefaultOn(){
+  if(!assertAdminCanEdit()) return;
   currentDef='On';
   if($('defaultState')) $('defaultState').value='On';
   document.querySelectorAll('select[id^="us_"][id$="_def"]').forEach(el=>el.value='On');
@@ -2903,6 +2924,7 @@ function getResetTargetNames(){
 }
 
 function setStatusForNames(names,status){
+  if(!assertAdminCanEdit()) return false;
   if(!assertSystemNotLocked()) return false; // กันปุ่ม Reset/ล้างสถานะแบบกลุ่ม ระหว่างระบบถูกปิดหรือล็อคตามช่วงเวลา
   if(!days.length){toast('ยังไม่ได้ตั้งช่วงเวลา');return false;}
   const allowed=getAllowedEmployeeNames();
@@ -3171,6 +3193,7 @@ let _isSavingAndReloading=false;
 // บันทึกเฉพาะช่องที่แก้ (pending) ขึ้น Google ทีละช่อง แล้วดึงข้อมูลล่าสุดมาแสดง
 // ปลอดภัยเมื่อหลายคนแก้พร้อมกัน (ไม่เขียนทับช่องของคนอื่น) และยืนยันว่าบันทึกจริง
 async function saveAndReload(){
+  if(!assertAdminCanEdit()) return;
   if(_isSavingAndReloading){ toast('กำลังบันทึกอยู่ กรุณารอสักครู่...'); return; }
   if(!gsConfig.url){ toast('⚠️ ยังไม่ได้ตั้งค่า Google Sheet URL'); return; }
   _isSavingAndReloading=true;
@@ -3209,6 +3232,8 @@ async function saveAndReload(){
 }
 
 async function saveLocal(){
+  // Admin แบบดูอย่างเดียว (KTG) ห้ามซิงก์การเปลี่ยนแปลงใดๆ ขึ้น Google Sheet ทั้งสิ้น
+  if(isReadOnlyAdmin()){ toast('บัญชีนี้มีสิทธิ์ดูและดาวน์โหลดข้อมูลเท่านั้น ไม่สามารถแก้ไขข้อมูลได้'); return; }
   // Google-first: บันทึก Google Sheet เป็นหลัก ไม่ใช้ localStorage
   if(gsConfig.url){
     try{
@@ -3898,6 +3923,7 @@ function handleStatusTemplateUpload(evt){
   const file=evt.target.files && evt.target.files[0];
   evt.target.value='';
   if(!file) return;
+  if(!assertAdminCanEdit()) return;
   if(!assertSystemNotLocked()) return;
   ensureSheetJS(()=>{
     const XLSX=window.XLSX;
